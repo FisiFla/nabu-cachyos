@@ -32,8 +32,14 @@ echo "[2/9] Flashing UEFI firmware to boot_b..."
 fastboot flash boot_b "${OUTPUT}/boot.img"
 
 # Step 3: Boot recovery
-echo "[3/9] Booting recovery (wait ~10 seconds for it to start)..."
-fastboot boot "${OUTPUT}/recovery.img"
+echo "[3/9] Booting into recovery..."
+if [ -f "${OUTPUT}/recovery.img" ]; then
+    echo "  Booting recovery.img via fastboot..."
+    fastboot boot "${OUTPUT}/recovery.img"
+else
+    echo "  No recovery.img found, booting into existing on-device recovery..."
+    fastboot reboot recovery
+fi
 echo "  Waiting for device..."
 adb wait-for-device
 sleep 5

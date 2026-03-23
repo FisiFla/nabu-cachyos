@@ -76,6 +76,7 @@ chmod 600 "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection"
 
 # 6. Install mkinitcpio preset (use sed instead of envsubst for portability)
 echo "Configuring mkinitcpio..."
+mkdir -p "${ROOTFS}/etc/mkinitcpio.d"
 sed "s/\${KERNEL_VERSION}/${KERNEL_VERSION}/g" "${SCRIPT_DIR}/mkinitcpio-nabu.preset" \
     > "${ROOTFS}/etc/mkinitcpio.d/nabu-cachyos.preset"
 

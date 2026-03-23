@@ -1,0 +1,15 @@
+[Compositing]
+Backend=OpenGL
+
+[Wayland]
+InputMethod=/usr/bin/maliit-keyboard
+VirtualKeyboardEnabled=true
+
+[Plugins]
+kwin4_effect_overviewEnabled=true
+
+[TouchEdges]
+Bottom=None
+Left=None
+Right=None
+Top=None

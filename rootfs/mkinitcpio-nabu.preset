@@ -1,0 +1,10 @@
+# mkinitcpio preset for CachyOS Nabu kernel
+# IMPORTANT: kernel and initramfs live on the ESP (mounted at /boot/efi)
+# so that GRUB can find them. This must match the GRUB config paths.
+
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/boot/efi/vmlinuz-${KERNEL_VERSION}-cachyos-nabu"
+
+PRESETS=('default')
+
+default_image="/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img"

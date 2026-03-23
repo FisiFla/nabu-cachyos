@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "Installing Docker and Podman..."
+sudo pacman -S --noconfirm docker podman
+sudo systemctl enable --now docker.service
+echo "Done. Docker and Podman are now available."
+echo "Note: Docker daemon uses ~100MB RAM. Stop with: sudo systemctl stop docker"

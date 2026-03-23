@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Default to current known-good version. User can override with argument.
+# WARNING: Not all sm8150-mainline branches boot on nabu. Known-good: 6.14.11.
+# Check https://gitlab.com/sm8150-mainline/linux/-/branches for available branches.
+# Branch 6.16+ does NOT boot on some devices.
+DEFAULT_BRANCH="sm8150/6.14.11"
+BRANCH="${1:-${DEFAULT_BRANCH}}"
+PATCHES_DIR="/opt/nabu-cachyos/patches"
+CONFIG_FILE="/opt/nabu-cachyos/cachyos.config"
+
+echo "=== CachyOS Nabu Kernel Updater ==="
+echo ""
+echo "Current kernel: $(uname -r)"
+echo "Target branch:  ${BRANCH}"
+echo ""
+echo "WARNING: Only sm8150/6.14.x branches are known to boot reliably."
+echo "Using an untested branch may make your tablet unbootable."
+echo "Make sure to run 'snapshot pre-kernel-update' first!"
+echo ""
+read -p "Continue? [y/N] " -n 1 -r
+echo
+[[ $REPLY =~ ^[Yy]$ ]] || exit 0
+
+WORK="/tmp/kernel-update"
+rm -rf "${WORK}"
+mkdir -p "${WORK}"
+cd "${WORK}"
+
+# Clone specific branch
+echo "Cloning sm8150-mainline branch ${BRANCH}..."
+git clone --depth 1 --branch "${BRANCH}" \
+    https://gitlab.com/sm8150-mainline/linux.git
+cd linux
+
+# Apply CachyOS patches if available
+if [ -d "${PATCHES_DIR}" ]; then
+    echo "Applying CachyOS patches..."
+    for patch in "${PATCHES_DIR}"/*.patch; do
+        patchname="$(basename "${patch}")"
+        echo "  ${patchname}..."
+        git apply --check "${patch}" 2>/dev/null && git apply "${patch}" || {
+            echo "  WARNING: ${patchname} did not apply cleanly, skipping."
+        }
+    done
+else
+    echo "WARNING: No patches found at ${PATCHES_DIR}"
+    echo "Kernel will be built without CachyOS patches (BORE, BBR3, ADIOS)."
+fi
+
+# Build config
+echo "Configuring kernel..."
+make defconfig
+scripts/kconfig/merge_config.sh -m .config arch/arm64/configs/sm8150.config
+[ -f "${CONFIG_FILE}" ] && \
+    scripts/kconfig/merge_config.sh -m .config "${CONFIG_FILE}"
+make olddefconfig
+
+# Compile
+echo "Compiling kernel (this takes ~15 minutes)..."
+make -j$(nproc) Image.gz dtbs modules
+
+# Install
+KVER=$(make kernelversion)
+echo "Installing kernel ${KVER}..."
+sudo make modules_install
+sudo cp arch/arm64/boot/Image.gz "/boot/efi/vmlinuz-${KVER}-cachyos-nabu"
+sudo cp arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb /boot/efi/
+sudo mkinitcpio -g "/boot/efi/initramfs-${KVER}-cachyos-nabu.img" -k "${KVER}"
+
+# Update GRUB config
+echo "Updating GRUB config..."
+sudo sed -i "s|vmlinuz-[0-9.]\\+-cachyos-nabu|vmlinuz-${KVER}-cachyos-nabu|g" /boot/efi/grub/grub.cfg
+sudo sed -i "s|initramfs-[0-9.]\\+-cachyos-nabu|initramfs-${KVER}-cachyos-nabu|g" /boot/efi/grub/grub.cfg
+
+echo ""
+echo "Kernel ${KVER} installed and GRUB updated."
+echo "Reboot to use the new kernel."
+echo "If it doesn't boot, select Verbose mode in GRUB to see what's wrong."

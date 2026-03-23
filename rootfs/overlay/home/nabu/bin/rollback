@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+echo "Available snapshots:"
+sudo btrfs subvolume list /.snapshots 2>/dev/null || echo "  (none)"
+echo ""
+echo "To rollback:"
+echo "  1. Boot into GRUB verbose mode"
+echo "  2. Edit kernel line, change rootflags=subvol=@ to rootflags=subvol=@snapshots/<name>"
+echo "  3. Boot and verify"
+echo "  4. If good, make permanent: sudo btrfs subvolume set-default <id> /"

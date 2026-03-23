@@ -1,0 +1,3 @@
+vivaldi-multiarch-bin
+maliit-keyboard
+maliit-framework

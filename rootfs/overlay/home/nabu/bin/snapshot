@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+NAME="${1:?Usage: snapshot <name>}"
+SNAP="/.snapshots/$(date +%Y%m%d-%H%M)-${NAME}"
+sudo btrfs subvolume snapshot / "${SNAP}"
+echo "Snapshot created: ${SNAP}"

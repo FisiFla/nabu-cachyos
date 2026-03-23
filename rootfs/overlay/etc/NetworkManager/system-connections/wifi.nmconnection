@@ -1,0 +1,17 @@
+[connection]
+id=Home WiFi
+type=wifi
+autoconnect=true
+
+[wifi]
+ssid=WIFI_SSID_PLACEHOLDER
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=WIFI_PASSWORD_PLACEHOLDER
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto

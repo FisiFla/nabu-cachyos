@@ -86,22 +86,21 @@ sed "s/\${KERNEL_VERSION}/${KERNEL_VERSION}/g" "${SCRIPT_DIR}/mkinitcpio-nabu.pr
     > "${ROOTFS}/etc/mkinitcpio.d/nabu-cachyos.preset"
 
 # 7. Build AUR packages
-# Note: Use arch-chroot for installation (not pacman -U --root) to ensure
-# install hooks run correctly inside the target rootfs context.
+# Use pacman -U with --root to install directly (avoids arch-chroot sandbox issues)
 echo "Building AUR packages..."
 for pkg in $(cat "${SCRIPT_DIR}/packages-aur.txt" | grep -v '^#' | grep -v '^$'); do
     echo "  Building ${pkg} from AUR..."
     cd /tmp
     sudo -u builder git clone --depth 1 "https://aur.archlinux.org/${pkg}.git" || true
     cd "${pkg}"
-    sudo -u builder makepkg -s --noconfirm 2>/dev/null || makepkg -s --noconfirm
+    sudo -u builder makepkg -s --noconfirm 2>/dev/null || makepkg -s --noconfirm || true
     pkgfile=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkgfile}" ]; then
-        cp "${pkgfile}" "${ROOTFS}/tmp/"
-        arch-chroot "${ROOTFS}" pacman -U --noconfirm "/tmp/${pkgfile}"
-        rm "${ROOTFS}/tmp/${pkgfile}"
+        pacman -U --noconfirm --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+            "/tmp/${pkg}/${pkgfile}"
+        echo "    Installed ${pkgfile}"
     else
-        echo "  WARNING: ${pkg} produced no package file"
+        echo "  WARNING: ${pkg} produced no package file, skipping"
     fi
 done
 

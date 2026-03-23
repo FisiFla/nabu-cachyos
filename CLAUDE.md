@@ -2,7 +2,12 @@
 
 ## Project Status
 
-**Current phase:** Spec approved, ready for implementation planning (writing-plans skill).
+**Current phase:** Implementation plan approved, ready for execution.
+
+**Plan:** `docs/superpowers/plans/2026-03-23-cachyos-nabu-build.md`
+- Phase 1 (Tasks 1-9): Build system — runs entirely on MacBook, no tablet needed
+- Phase 2 (Task 10): Flash — needs tablet connected via USB-C in fastboot mode
+- To start: invoke `superpowers:subagent-driven-development` or `superpowers:executing-plans` skill
 
 The design spec is at `docs/superpowers/specs/2026-03-23-cachyos-nabu-design.md` — read it first, it's the source of truth. It passed spec review (2 rounds, all 16 issues fixed). The user has approved it.
 

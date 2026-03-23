@@ -182,7 +182,8 @@ FSTAB
 # 13. Copy rootfs to output directory (from container-local to bind mount)
 echo "Copying rootfs to output..."
 umount "${ROOTFS}" 2>/dev/null || true
-rm -rf "${FINAL_ROOTFS}"
+# Must run as root inside container to remove previous root-owned files
+rm -rf "${FINAL_ROOTFS}" 2>/dev/null || true
 mkdir -p "${FINAL_ROOTFS}"
 # Use tar to preserve all permissions/symlinks (cp -a fails on macOS Docker volumes
 # for files with special permissions like dbus-daemon-launch-helper)

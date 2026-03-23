@@ -25,6 +25,9 @@ rm -f /var/lib/pacman/db.lck 2>/dev/null || true
 pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
     $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
 
+# Disable Landlock sandbox in rootfs pacman (fails inside Docker)
+sed -i '/^\[options\]/a DisableSandbox' "${ROOTFS}/etc/pacman.conf"
+
 # 2. Install kernel to /boot/efi/ (the ESP mount point)
 # IMPORTANT: kernel artifacts live on the ESP so GRUB can find them.
 # /boot/efi/ is where the ESP partition is mounted (see fstab).

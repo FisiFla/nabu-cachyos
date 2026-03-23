@@ -3,6 +3,10 @@ ADD ArchLinuxARM-aarch64-latest.tar.gz /
 
 RUN pacman-key --init && pacman-key --populate archlinuxarm
 
+# Disable Landlock sandbox (fails inside Docker containers)
+RUN sed -i 's/^#\?DisableSandbox.*/DisableSandbox/' /etc/pacman.conf || \
+    echo 'DisableSandbox' >> /etc/pacman.conf
+
 RUN pacman -Syu --noconfirm && \
     pacman -S --noconfirm --needed \
     base-devel bc bison flex dtc grub dosfstools btrfs-progs \

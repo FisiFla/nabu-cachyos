@@ -3,7 +3,8 @@ set -euo pipefail
 
 KERNEL_VERSION="${KERNEL_VERSION:?KERNEL_VERSION not set}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOTFS="/build/output/rootfs"
+# Rootfs is built in container-local filesystem (not on bind mount)
+ROOTFS="/tmp/rootfs-build"
 OUTPUT="/build/output"
 
 echo "--- Building flashable images ---"

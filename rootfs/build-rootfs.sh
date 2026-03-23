@@ -179,16 +179,9 @@ PARTLABEL=linux  /.snapshots btrfs  subvol=@snapshots,compress=zstd:3,noatime,ss
 PARTLABEL=esp    /boot/efi   vfat   defaults  0 2
 FSTAB
 
-# 13. Copy rootfs to output directory (from container-local to bind mount)
-echo "Copying rootfs to output..."
+# 13. Leave rootfs in container-local path for build-image.sh to consume
+# (Don't copy to bind mount — macOS Docker volumes can't handle Linux permissions)
 umount "${ROOTFS}" 2>/dev/null || true
-# Must run as root inside container to remove previous root-owned files
-rm -rf "${FINAL_ROOTFS}" 2>/dev/null || true
-mkdir -p "${FINAL_ROOTFS}"
-# Use tar to preserve all permissions/symlinks (cp -a fails on macOS Docker volumes
-# for files with special permissions like dbus-daemon-launch-helper)
-tar -C "${ROOTFS}" -cf - . | tar -C "${FINAL_ROOTFS}" -xf -
-
 echo "--- Rootfs build complete ---"
-echo "  Root: ${FINAL_ROOTFS}"
-du -sh "${FINAL_ROOTFS}"
+echo "  Root: ${ROOTFS}"
+du -sh "${ROOTFS}"

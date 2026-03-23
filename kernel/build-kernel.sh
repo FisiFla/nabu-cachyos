@@ -20,19 +20,27 @@ fi
 cd "${BUILD_DIR}/linux"
 
 # Apply CachyOS patches
+# BORE (0001) is critical. Others are best-effort — the kernel works without them.
+CRITICAL_PATCHES="0001-bore"
 echo "Applying patches..."
 for patch in "${SCRIPT_DIR}/patches/"*.patch; do
     patchname="$(basename "${patch}")"
     echo "  Applying ${patchname}..."
-    if ! git apply --check "${patch}" 2>/dev/null; then
-        echo "  ERROR: ${patchname} does not apply cleanly!"
-        echo "  Attempting with --3way merge..."
-        git apply --3way "${patch}" || {
-            echo "  FATAL: ${patchname} failed to apply. Aborting."
-            exit 1
-        }
-    else
+    is_critical=false
+    for cp in ${CRITICAL_PATCHES}; do
+        [[ "${patchname}" == "${cp}"* ]] && is_critical=true
+    done
+    if git apply --check "${patch}" 2>/dev/null; then
         git apply "${patch}"
+        echo "    OK"
+    elif git apply --3way "${patch}" 2>/dev/null; then
+        echo "    OK (3-way merge)"
+    elif ${is_critical}; then
+        echo "    FATAL: critical patch ${patchname} failed to apply. Aborting."
+        exit 1
+    else
+        echo "    WARNING: ${patchname} did not apply cleanly, skipping."
+        echo "    The kernel will work without it."
     fi
 done
 

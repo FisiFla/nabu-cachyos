@@ -88,16 +88,28 @@ sed "s/\${KERNEL_VERSION}/${KERNEL_VERSION}/g" "${SCRIPT_DIR}/mkinitcpio-nabu.pr
 # 7. Build AUR packages
 # Use pacman -U with --root to install directly (avoids arch-chroot sandbox issues)
 echo "Building AUR packages..."
+AUR_BUILD="/tmp/aur-build"
+mkdir -p "${AUR_BUILD}"
+chown builder:builder "${AUR_BUILD}"
 for pkg in $(cat "${SCRIPT_DIR}/packages-aur.txt" | grep -v '^#' | grep -v '^$'); do
     echo "  Building ${pkg} from AUR..."
-    cd /tmp
-    sudo -u builder git clone --depth 1 "https://aur.archlinux.org/${pkg}.git" || true
-    cd "${pkg}"
-    sudo -u builder makepkg -s --noconfirm 2>/dev/null || makepkg -s --noconfirm || true
+    if [ -d "${AUR_BUILD}/${pkg}" ]; then
+        rm -rf "${AUR_BUILD}/${pkg}"
+    fi
+    sudo -u builder git clone --depth 1 "https://aur.archlinux.org/${pkg}.git" "${AUR_BUILD}/${pkg}" || {
+        echo "  WARNING: Failed to clone ${pkg}, skipping"
+        continue
+    }
+    cd "${AUR_BUILD}/${pkg}"
+    # makepkg must run as non-root; -s installs deps via sudo
+    sudo -u builder makepkg -s --noconfirm || {
+        echo "  WARNING: makepkg failed for ${pkg}, skipping"
+        continue
+    }
     pkgfile=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkgfile}" ]; then
         pacman -U --noconfirm --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
-            "/tmp/${pkg}/${pkgfile}"
+            "${AUR_BUILD}/${pkg}/${pkgfile}"
         echo "    Installed ${pkgfile}"
     else
         echo "  WARNING: ${pkg} produced no package file, skipping"

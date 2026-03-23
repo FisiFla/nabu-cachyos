@@ -11,7 +11,7 @@ RUN pacman -Syu --noconfirm && \
     pacman -S --noconfirm --needed \
     base-devel bc bison flex dtc grub dosfstools btrfs-progs \
     mtools arch-install-scripts mkinitcpio git wget zstd parted \
-    cpio android-tools
+    cpio android-tools python python-mako
 
 # Create non-root user for makepkg
 RUN useradd -m builder && \

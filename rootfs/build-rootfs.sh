@@ -15,6 +15,8 @@ echo "--- Building rootfs ---"
 # 1. Bootstrap Arch ARM
 echo "Bootstrapping Arch Linux ARM..."
 mkdir -p "${ROOTFS}"
+# Remove stale pacman locks (common in Docker containers)
+rm -f /var/lib/pacman/db.lck "${ROOTFS}/var/lib/pacman/db.lck" 2>/dev/null || true
 pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
     $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
 

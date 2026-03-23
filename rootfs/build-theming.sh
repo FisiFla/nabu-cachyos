@@ -14,11 +14,12 @@ echo "--- Building CachyOS theming packages ---"
 # build each package from its subdirectory.
 
 mkdir -p "${THEME_BUILD}"
+chown builder:builder "${THEME_BUILD}"
 cd "${THEME_BUILD}"
 
 if [ ! -d "CachyOS-PKGBUILDS" ]; then
     echo "Cloning CachyOS-PKGBUILDS..."
-    git clone --depth 1 "${PKGBUILDS_REPO}" CachyOS-PKGBUILDS
+    sudo -u builder git clone --depth 1 "${PKGBUILDS_REPO}" CachyOS-PKGBUILDS
 fi
 
 # Helper: build a PKGBUILD from CachyOS-PKGBUILDS/<subdir> and install to rootfs
@@ -33,13 +34,12 @@ build_and_install() {
         sudo -u builder makepkg -f --noconfirm 2>&1 || true
     }
 
-    # Install into target rootfs (use arch-chroot so install hooks run correctly)
+    # Install into target rootfs
     local pkg
     pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkg}" ]; then
-        cp "${pkg}" "${ROOTFS}/tmp/"
-        arch-chroot "${ROOTFS}" pacman -U --noconfirm "/tmp/$(basename "${pkg}")"
-        rm "${ROOTFS}/tmp/$(basename "${pkg}")"
+        pacman -U --noconfirm --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+            "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}/${pkg}"
         echo "    Installed ${pkg}"
     else
         echo "    WARNING: No package produced for ${subdir}"

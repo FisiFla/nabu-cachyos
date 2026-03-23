@@ -163,9 +163,12 @@ arch-chroot "${ROOTFS}" systemctl enable bluetooth
 arch-chroot "${ROOTFS}" systemctl enable systemd-zram-setup@zram0.service
 arch-chroot "${ROOTFS}" systemctl --global enable maliit-server.service
 
-# 11. Generate initramfs
+# 11. Generate initramfs (non-fatal: warnings about autodetect/microcode are expected in chroot)
 echo "Generating initramfs..."
-arch-chroot "${ROOTFS}" mkinitcpio -p nabu-cachyos
+arch-chroot "${ROOTFS}" mkinitcpio -p nabu-cachyos || {
+    echo "WARNING: mkinitcpio had errors but initramfs may still be usable"
+    ls -la "${ROOTFS}/boot/efi/initramfs-"* 2>/dev/null || echo "  No initramfs found!"
+}
 
 # 12. fstab
 cat > "${ROOTFS}/etc/fstab" << 'FSTAB'

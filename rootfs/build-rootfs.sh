@@ -19,6 +19,8 @@ echo "--- Building rootfs ---"
 echo "Bootstrapping Arch Linux ARM..."
 rm -rf "${ROOTFS}"
 mkdir -p "${ROOTFS}"
+# Bind-mount to make it a mount point (arch-chroot requires this)
+mount --bind "${ROOTFS}" "${ROOTFS}"
 rm -f /var/lib/pacman/db.lck 2>/dev/null || true
 pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
     $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
@@ -153,6 +155,7 @@ FSTAB
 
 # 13. Copy rootfs to output directory (from container-local to bind mount)
 echo "Copying rootfs to output..."
+umount "${ROOTFS}" 2>/dev/null || true
 rm -rf "${FINAL_ROOTFS}"
 mkdir -p "${FINAL_ROOTFS}"
 cp -a "${ROOTFS}/"* "${FINAL_ROOTFS}/"

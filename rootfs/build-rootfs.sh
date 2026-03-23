@@ -6,7 +6,10 @@ WIFI_SSID="${WIFI_SSID:?WIFI_SSID not set}"
 WIFI_PASSWORD="${WIFI_PASSWORD:?WIFI_PASSWORD not set}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOTFS="/build/output/rootfs"
+# Build rootfs in container-local filesystem (not bind mount) to avoid
+# macOS Docker volume lock issues with pacman, then copy to output.
+ROOTFS="/tmp/rootfs-build"
+FINAL_ROOTFS="/build/output/rootfs"
 KERNEL_DIR="/build/output/kernel"
 FIRMWARE_DIR="/build/output/firmware/nabu-firmware"
 
@@ -14,9 +17,9 @@ echo "--- Building rootfs ---"
 
 # 1. Bootstrap Arch ARM
 echo "Bootstrapping Arch Linux ARM..."
+rm -rf "${ROOTFS}"
 mkdir -p "${ROOTFS}"
-# Remove stale pacman locks (common in Docker containers)
-rm -f /var/lib/pacman/db.lck "${ROOTFS}/var/lib/pacman/db.lck" 2>/dev/null || true
+rm -f /var/lib/pacman/db.lck 2>/dev/null || true
 pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
     $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
 
@@ -147,6 +150,12 @@ PARTLABEL=linux  /.snapshots btrfs  subvol=@snapshots,compress=zstd:3,noatime,ss
 PARTLABEL=esp    /boot/efi   vfat   defaults  0 2
 FSTAB
 
+# 13. Copy rootfs to output directory (from container-local to bind mount)
+echo "Copying rootfs to output..."
+rm -rf "${FINAL_ROOTFS}"
+mkdir -p "${FINAL_ROOTFS}"
+cp -a "${ROOTFS}/"* "${FINAL_ROOTFS}/"
+
 echo "--- Rootfs build complete ---"
-echo "  Root: ${ROOTFS}"
-du -sh "${ROOTFS}"
+echo "  Root: ${FINAL_ROOTFS}"
+du -sh "${FINAL_ROOTFS}"

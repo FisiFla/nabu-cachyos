@@ -1,6 +1,7 @@
 base
 base-devel
 linux-firmware
+mkinitcpio
 networkmanager
 bluez
 bluez-utils

@@ -1,0 +1,14 @@
+set default=0
+set timeout=3
+
+menuentry "CachyOS Nabu (KERNEL_VERSION_PLACEHOLDER)" {
+    linux /vmlinuz-KERNEL_VERSION_PLACEHOLDER-cachyos-nabu root=PARTLABEL=linux rootflags=subvol=@ rw rootwait quiet splash
+    initrd /initramfs-KERNEL_VERSION_PLACEHOLDER-cachyos-nabu.img
+    devicetree /sm8150-xiaomi-nabu.dtb
+}
+
+menuentry "CachyOS Nabu (KERNEL_VERSION_PLACEHOLDER) - Verbose" {
+    linux /vmlinuz-KERNEL_VERSION_PLACEHOLDER-cachyos-nabu root=PARTLABEL=linux rootflags=subvol=@ rw rootwait loglevel=7
+    initrd /initramfs-KERNEL_VERSION_PLACEHOLDER-cachyos-nabu.img
+    devicetree /sm8150-xiaomi-nabu.dtb
+}

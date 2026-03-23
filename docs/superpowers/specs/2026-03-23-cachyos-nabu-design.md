@@ -22,7 +22,7 @@ Build a CachyOS-flavored Arch Linux ARM distribution for the Xiaomi Pad 5 (coden
 - Camera or microphone support (no mainline drivers exist)
 - Reliable suspend/resume (known kernel limitation on nabu)
 - Rebuilding CachyOS's x86-specific packages for ARM (AMD P-State, TLB broadcast, x86 crypto — these are irrelevant on ARM)
-- Cachy Browser (requires full Firefox/Chromium rebuild — using `vivaldi-multiarch-bin-multiarch-bin` from AUR instead, which provides pre-built aarch64 binaries)
+- Cachy Browser (requires full Firefox/Chromium rebuild — using `vivaldi-multiarch-bin` from AUR instead, which provides pre-built aarch64 binaries)
 - Android dual-boot (user opted for Linux-only)
 
 ## 2. Hardware Target
@@ -76,13 +76,13 @@ nabu-cachyos/
 │       │   └── sddm.conf.d/autologin.conf
 │       └── usr/share/         # Theming assets
 ├── recovery/
-│   └── build-recovery.sh      # Builds minimal recovery initramfs (busybox + parted + sgdisk + dd + zstd)
+│   └── fetch-recovery.sh      # Downloads pre-built TWRP recovery for nabu (includes adbd, parted, sgdisk, dd)
 ├── image/
 │   ├── build-image.sh         # Assembles kernel + rootfs into flashable images
 │   └── flash.sh               # Fastboot commands to flash the tablet
 └── output/
     ├── boot.img               # UEFI firmware (pre-built, downloaded)
-    ├── recovery.img            # Minimal recovery for repartitioning and flashing
+    ├── recovery.img            # Pre-built TWRP recovery (provides adbd for adb shell/push/pull during flash)
     ├── esp.img                # EFI System Partition
     └── linux.img.zst          # Btrfs root filesystem (zstd compressed)
 ```
@@ -113,9 +113,10 @@ All build scripts use `set -euo pipefail` and validate each step (patch applicat
    - Builds and installs CachyOS theming packages from git (using `makepkg`)
    - Configures: locale, timezone, fstab, user account, sudo, SSH, services
    - Generates initramfs with `mkinitcpio` (preset configured to output `initramfs-${KERNEL_VERSION}-cachyos-nabu.img`)
-5. Inside Docker, `recovery/build-recovery.sh`:
-   - Builds a minimal initramfs-based recovery image containing: busybox, parted, sgdisk, dd, zstd, mkfs.fat, mkfs.btrfs
-   - Packages as an Android boot.img via `mkbootimg` (so it can be loaded via `fastboot boot`)
+5. `recovery/fetch-recovery.sh`:
+   - Downloads a pre-built TWRP recovery image for nabu (from https://dl.twrp.me/nabu/)
+   - TWRP includes `adbd` (required for `adb shell`/`adb push` during flash), plus parted, sgdisk, dd, mkfs
+   - We use a pre-built recovery because building a custom one that correctly initializes adbd (USB gadget config, init scripts) is non-trivial and error-prone
 6. Inside Docker, `image/build-image.sh`:
    - Creates `esp.img` (512MB FAT32) using `grub-install --target=arm64-efi --efi-directory=... --boot-directory=...`:
      - GRUB EFI binary (`BOOTAA64.EFI`)
@@ -414,9 +415,9 @@ Note: mkinitcpio preset is configured to output `initramfs-${KERNEL_VERSION}-cac
 
 1. Boot tablet into fastboot mode (Volume Down + Power)
 2. Flash UEFI firmware to `boot_b`: `fastboot flash boot_b output/boot.img`
-3. Boot our custom recovery image: `fastboot boot output/recovery.img`
-   - This recovery image is built by `recovery/build-recovery.sh` and contains: busybox, parted, sgdisk, dd, zstd, mkfs.fat, mkfs.btrfs
-   - It boots into a minimal shell accessible via `adb shell`
+3. Boot pre-built TWRP recovery: `fastboot boot output/recovery.img`
+   - This is a pre-built TWRP recovery for nabu (downloaded by `recovery/fetch-recovery.sh`)
+   - TWRP provides `adbd` (enabling `adb shell`/`adb push`/`adb pull`), plus parted, sgdisk, dd, mkfs
 4. Repartition via adb (GPT partition table, the most dangerous step):
    ```bash
    # Backup current partition table
@@ -491,7 +492,7 @@ sudo btrfs subvolume snapshot / /.snapshots/fresh-install
 
 - `snapshot <name>` — create Btrfs snapshot
 - `rollback` — list and restore snapshots
-- `kernel-update` — rebuild kernel from latest sources
+- `kernel-update [branch]` — rebuild kernel from sm8150-mainline (defaults to pinned 6.14.11, warns about untested branches)
 
 ## 10. Hardware Support Matrix
 

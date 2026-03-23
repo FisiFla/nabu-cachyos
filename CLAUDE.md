@@ -80,7 +80,7 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 - Pen pressure sensitivity in landscape mode
 
 ### AUR packages needed
-- `vivaldi` — Chromium-based browser
+- `vivaldi-multiarch-bin` — Chromium-based browser (aarch64 pre-built binaries, NOT plain `vivaldi` which is x86_64 only). Note: this AUR package has had maintenance churn — verify it still exists and builds before starting the image build. If orphaned, fall back to `chromium` from official repos.
 - `maliit-keyboard` + `maliit-framework` — on-screen keyboard (not in official ALARM repos)
 
 ## Build Commands (for reference)

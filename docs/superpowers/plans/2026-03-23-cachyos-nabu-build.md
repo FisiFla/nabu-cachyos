@@ -34,7 +34,7 @@ nabu-cachyos/
 ├── rootfs/
 │   ├── build-rootfs.sh                          # pacstrap + packages + config + theming
 │   ├── packages.txt                             # Official ALARM repo packages
-│   ├── packages-aur.txt                         # AUR packages (vivaldi, maliit)
+│   ├── packages-aur.txt                         # AUR packages (vivaldi-multiarch-bin, maliit)
 │   ├── pacman-alarm.conf                        # pacman.conf for ALARM mirrors
 │   ├── mkinitcpio-nabu.preset                   # mkinitcpio preset for consistent naming
 │   └── overlay/

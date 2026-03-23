@@ -184,7 +184,9 @@ echo "Copying rootfs to output..."
 umount "${ROOTFS}" 2>/dev/null || true
 rm -rf "${FINAL_ROOTFS}"
 mkdir -p "${FINAL_ROOTFS}"
-cp -a "${ROOTFS}/"* "${FINAL_ROOTFS}/"
+# Use tar to preserve all permissions/symlinks (cp -a fails on macOS Docker volumes
+# for files with special permissions like dbus-daemon-launch-helper)
+tar -C "${ROOTFS}" -cf - . | tar -C "${FINAL_ROOTFS}" -xf -
 
 echo "--- Rootfs build complete ---"
 echo "  Root: ${FINAL_ROOTFS}"

@@ -2,3 +2,9 @@ output/
 docs/
 .git/
 .DS_Store
+.cache/
+*.img
+*.img.zst
+kernel/patches/
+rootfs/overlay/
+firebase-debug.log

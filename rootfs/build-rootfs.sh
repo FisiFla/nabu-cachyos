@@ -15,18 +15,27 @@ FIRMWARE_DIR="/build/output/firmware/nabu-firmware"
 
 echo "--- Building rootfs ---"
 
-# 1. Bootstrap Arch ARM
-echo "Bootstrapping Arch Linux ARM..."
+# 1. Bootstrap Arch ARM (cached: skip pacstrap if cache tarball exists)
+PACSTRAP_CACHE="/build/.cache/pacstrap-rootfs.tar"
 rm -rf "${ROOTFS}"
 mkdir -p "${ROOTFS}"
 # Bind-mount to make it a mount point (arch-chroot requires this)
 mount --bind "${ROOTFS}" "${ROOTFS}"
-rm -f /var/lib/pacman/db.lck 2>/dev/null || true
-pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
-    $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
 
-# Disable Landlock sandbox in rootfs pacman (fails inside Docker)
-sed -i '/^\[options\]/a DisableSandbox' "${ROOTFS}/etc/pacman.conf"
+if [ -f "${PACSTRAP_CACHE}" ]; then
+    echo "Restoring cached pacstrap rootfs..."
+    tar xf "${PACSTRAP_CACHE}" -C "${ROOTFS}"
+else
+    echo "Bootstrapping Arch Linux ARM (first run, will be cached)..."
+    rm -f /var/lib/pacman/db.lck 2>/dev/null || true
+    pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
+        $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
+    # Disable Landlock sandbox in rootfs pacman (fails inside Docker)
+    sed -i '/^\[options\]/a DisableSandbox' "${ROOTFS}/etc/pacman.conf"
+    # Cache for next run
+    echo "Caching pacstrap rootfs for future builds..."
+    tar cf "${PACSTRAP_CACHE}" -C "${ROOTFS}" .
+fi
 
 # 2. Install kernel to /boot/efi/ (the ESP mount point)
 # IMPORTANT: kernel artifacts live on the ESP so GRUB can find them.

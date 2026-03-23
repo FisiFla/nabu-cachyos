@@ -69,7 +69,7 @@ nabu-cachyos/
 │               └── user/
 │                   └── maliit-server.service     # On-screen keyboard autostart
 ├── recovery/
-│   └── build-recovery.sh                        # Build minimal recovery initramfs
+│   └── fetch-recovery.sh                        # Downloads pre-built TWRP recovery for nabu
 ├── image/
 │   ├── build-image.sh                           # Assemble ESP + rootfs images
 │   ├── grub.cfg.template                        # GRUB config template (KERNEL_VERSION substitution)
@@ -187,7 +187,7 @@ docker run --rm --privileged \
         echo '[6/8] Building images...'
         bash image/build-image.sh
         echo '[7/8] Building recovery...'
-        bash recovery/build-recovery.sh
+        bash recovery/fetch-recovery.sh
     "
 
 echo "[8/8] Done."
@@ -1417,7 +1417,7 @@ Builds ESP (FAT32 with GRUB arm64-efi + kernel) and rootfs
 ### Task 9: Recovery image and flash script
 
 **Files:**
-- Create: `recovery/build-recovery.sh`
+- Create: `recovery/fetch-recovery.sh`
 - Create: `image/flash.sh`
 
 - [ ] **Step 1: Write recovery build script**
@@ -1581,7 +1581,7 @@ echo "  3. Or reflash with Xiaomi stock ROM"
 - [ ] **Step 3: Make executable and commit**
 
 ```bash
-chmod +x recovery/build-recovery.sh image/flash.sh
+chmod +x recovery/fetch-recovery.sh image/flash.sh
 git add recovery/ image/flash.sh
 git commit -m "feat: add recovery image builder and flash script
 

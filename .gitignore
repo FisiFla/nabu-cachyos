@@ -1,3 +1,6 @@
 .DS_Store
 .nwave/
-AGENTS.md
+output/
+*.img
+*.img.zst
+*.tar.gz

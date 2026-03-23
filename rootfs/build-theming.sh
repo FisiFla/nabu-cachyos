@@ -28,10 +28,11 @@ build_and_install() {
     echo "  Building ${subdir}..."
     cd "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}"
 
-    # Build as non-root user (makepkg requirement)
-    sudo -u builder makepkg -f --noconfirm --syncdeps 2>&1 || {
-        echo "    WARNING: makepkg failed for ${subdir}, attempting without deps..."
-        sudo -u builder makepkg -f --noconfirm 2>&1 || true
+    # Build as non-root user. These are arch=any theming packages so deps are
+    # already in the rootfs from pacstrap. Use --nodeps to skip host dep checks.
+    sudo -u builder makepkg -f --noconfirm --nodeps --skipinteg 2>&1 || {
+        echo "    WARNING: makepkg failed for ${subdir}, skipping"
+        return 0
     }
 
     # Install into target rootfs

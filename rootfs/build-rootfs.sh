@@ -170,13 +170,11 @@ arch-chroot "${ROOTFS}" mkinitcpio -p nabu-cachyos || {
     ls -la "${ROOTFS}/boot/efi/initramfs-"* 2>/dev/null || echo "  No initramfs found!"
 }
 
-# 12. fstab
+# 12. fstab (ext4 root, FAT32 ESP)
 cat > "${ROOTFS}/etc/fstab" << 'FSTAB'
 # CachyOS Nabu fstab
-PARTLABEL=linux  /           btrfs  subvol=@,compress=zstd:3,noatime,ssd,discard=async  0 0
-PARTLABEL=linux  /home       btrfs  subvol=@home,compress=zstd:3,noatime,ssd,discard=async  0 0
-PARTLABEL=linux  /.snapshots btrfs  subvol=@snapshots,compress=zstd:3,noatime,ssd,discard=async  0 0
-PARTLABEL=esp    /boot/efi   vfat   defaults  0 2
+PARTLABEL=linux  /           ext4   rw,noatime,discard  0 1
+PARTLABEL=esp    /boot/efi   vfat   defaults             0 2
 FSTAB
 
 # 13. Leave rootfs in container-local path for build-image.sh to consume

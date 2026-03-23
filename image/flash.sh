@@ -56,7 +56,7 @@ adb shell sgdisk --resize-table 64 /dev/block/sda
 # Delete userdata (partition 31)
 adb shell sgdisk --delete=31 /dev/block/sda
 # Create ESP (512MB, EFI System Partition type)
-adb shell sgdisk --new=31:0:+512M --typecode=31:EF00 --change-name=31:esp /dev/block/sda
+adb shell sgdisk --new=31:0:+1G --typecode=31:EF00 --change-name=31:esp /dev/block/sda
 # Create linux (remaining space, Linux filesystem type)
 adb shell sgdisk --new=32:0:0 --typecode=32:8300 --change-name=32:linux /dev/block/sda
 # Verify

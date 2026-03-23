@@ -49,20 +49,24 @@ Build a CachyOS-flavored Arch Linux ARM distribution for the Xiaomi Pad 5 (coden
 
 ```
 nabu-cachyos/
-├── Dockerfile                 # aarch64 Arch Linux build environment
-├── build.sh                   # Main entry point — builds everything
+├── Dockerfile                 # aarch64 Arch Linux ARM build environment (bootstrapped from ALARM rootfs tarball)
+├── build.sh                   # Main entry point — builds everything, sets KERNEL_VERSION variable
 ├── kernel/
 │   ├── build-kernel.sh        # Clones sm8150-mainline, applies patches, compiles
 │   ├── sm8150.config          # Base nabu kernel config (from upstream)
-│   ├── cachyos.config         # Config fragment: BORE, sched-ext, HZ=1000, BBR3, etc.
+│   ├── cachyos.config         # Config fragment: BORE, sched-ext, HZ=1000, BBR3, containers, etc.
 │   └── patches/
 │       ├── 0001-bore.patch    # BORE scheduler v5.9.6
 │       ├── 0002-bbr3.patch    # BBR3 TCP congestion control
 │       ├── 0003-adios.patch   # ADIOS I/O scheduler
 │       └── 0004-cachy-arm.patch # Arch-neutral bits (HZ options, PREEMPT_LAZY, THP, v4l2loopback)
+├── firmware/
+│   └── fetch-firmware.sh      # Downloads nabu-specific Qualcomm firmware blobs from map220v/nabu-firmware
 ├── rootfs/
 │   ├── build-rootfs.sh        # pacstrap + package installation + config overlay
-│   ├── packages.txt           # Package list
+│   ├── packages.txt           # Package list (official repos)
+│   ├── packages-aur.txt       # AUR package list (vivaldi, maliit-keyboard, maliit-framework)
+│   ├── pacman-alarm.conf      # pacman.conf pointing at Arch Linux ARM mirrors (mirror.archlinuxarm.org)
 │   └── overlay/               # Files copied directly into the rootfs
 │       ├── etc/
 │       │   ├── sysctl.d/70-cachyos.conf
@@ -71,44 +75,76 @@ nabu-cachyos/
 │       │   ├── NetworkManager/system-connections/wifi.nmconnection
 │       │   └── sddm.conf.d/autologin.conf
 │       └── usr/share/         # Theming assets
+├── recovery/
+│   └── build-recovery.sh      # Builds minimal recovery initramfs (busybox + parted + sgdisk + dd + zstd)
 ├── image/
 │   ├── build-image.sh         # Assembles kernel + rootfs into flashable images
 │   └── flash.sh               # Fastboot commands to flash the tablet
 └── output/
     ├── boot.img               # UEFI firmware (pre-built, downloaded)
+    ├── recovery.img            # Minimal recovery for repartitioning and flashing
     ├── esp.img                # EFI System Partition
     └── linux.img.zst          # Btrfs root filesystem (zstd compressed)
 ```
 
 ### Build flow
 
-1. `build.sh` builds a Docker image (aarch64 Arch Linux with build dependencies)
-2. Inside Docker, `kernel/build-kernel.sh`:
-   - Clones `gitlab.com/sm8150-mainline/linux` branch `sm8150/6.14.11`
-   - Applies BORE, BBR3, ADIOS, and cachy-arm patches
+All build scripts use `set -euo pipefail` and validate each step (patch application, package availability, kernel compilation) with clear error messages on failure. A `KERNEL_VERSION` variable (e.g., `6.14.11`) is set in `build.sh` and propagated to all scripts — no hardcoded version strings in individual scripts.
+
+1. `build.sh` builds a Docker image (aarch64 Arch Linux ARM with build dependencies)
+2. Inside Docker, `firmware/fetch-firmware.sh`:
+   - Clones `github.com/map220v/nabu-firmware`
+   - Stages firmware blobs for installation into rootfs at `/usr/lib/firmware/`
+   - These blobs provide: WiFi (WCN3991), GPU (Adreno 640), Bluetooth, audio codec firmware
+   - **Note:** `linux-firmware` (from Arch repos) provides generic firmware; nabu-specific Qualcomm blobs are NOT upstreamed and must come from this repo
+3. Inside Docker, `kernel/build-kernel.sh`:
+   - Clones `gitlab.com/sm8150-mainline/linux` branch `sm8150/${KERNEL_VERSION}`
+   - Applies BORE, BBR3, ADIOS, and cachy-arm patches (each with `git apply --check` validation before applying)
    - Merges `defconfig` + `sm8150.config` + `cachyos.config`
    - Compiles: `make -j$(nproc) Image.gz dtbs modules`
    - Outputs: `Image.gz`, `sm8150-xiaomi-nabu.dtb`, kernel modules
-3. Inside Docker, `rootfs/build-rootfs.sh`:
-   - Bootstraps Arch ARM via `pacstrap`
-   - Installs packages from `packages.txt`
+4. Inside Docker, `rootfs/build-rootfs.sh`:
+   - Bootstraps Arch Linux ARM via `pacstrap -C pacman-alarm.conf` (uses Arch Linux ARM mirrors at `mirror.archlinuxarm.org`, NOT mainline Arch repos which only serve x86_64)
+   - Installs packages from `packages.txt` (official ALARM repos)
+   - Builds and installs AUR packages from `packages-aur.txt` (vivaldi, maliit-keyboard, maliit-framework) using `makepkg` as a non-root build user
    - Installs kernel image, modules, DTB
+   - Installs nabu-specific firmware blobs to `/usr/lib/firmware/`
    - Copies overlay configs
-   - Builds and installs CachyOS theming packages from git
-   - Builds Vivaldi from AUR
+   - Builds and installs CachyOS theming packages from git (using `makepkg`)
    - Configures: locale, timezone, fstab, user account, sudo, SSH, services
-   - Generates initramfs with `mkinitcpio`
-4. Inside Docker, `image/build-image.sh`:
-   - Creates `esp.img` (512MB FAT32): GRUB + kernel + initramfs + DTB
+   - Generates initramfs with `mkinitcpio` (preset configured to output `initramfs-${KERNEL_VERSION}-cachyos-nabu.img`)
+5. Inside Docker, `recovery/build-recovery.sh`:
+   - Builds a minimal initramfs-based recovery image containing: busybox, parted, sgdisk, dd, zstd, mkfs.fat, mkfs.btrfs
+   - Packages as an Android boot.img via `mkbootimg` (so it can be loaded via `fastboot boot`)
+6. Inside Docker, `image/build-image.sh`:
+   - Creates `esp.img` (512MB FAT32) using `grub-install --target=arm64-efi --efi-directory=... --boot-directory=...`:
+     - GRUB EFI binary (`BOOTAA64.EFI`)
+     - Kernel: `vmlinuz-${KERNEL_VERSION}-cachyos-nabu`
+     - Initramfs: `initramfs-${KERNEL_VERSION}-cachyos-nabu.img`
+     - DTB: `sm8150-xiaomi-nabu.dtb`
+     - GRUB config: generated from template using `KERNEL_VERSION`
    - Creates `linux.img` (Btrfs): rootfs with `@`, `@home`, `@snapshots` subvolumes
    - Compresses `linux.img` with zstd
-5. Artifacts copied out of Docker to `output/`
+7. Artifacts copied out of Docker to `output/`
 
 ### Docker environment
 
-- Base: `archlinux:latest` (runs natively on M4 Pro as aarch64)
-- Build deps: `base-devel`, `bc`, `bison`, `flex`, `dtc`, `grub`, `dosfstools`, `btrfs-progs`, `mtools`, `arch-install-scripts`, `mkinitcpio`
-- Estimated build time: ~20-30 minutes total (kernel ~15 min, rootfs ~10 min, image ~2 min)
+The official `archlinux:latest` Docker image is x86_64 only. Since we need an aarch64 environment (for native `pacstrap`, `makepkg`, and `mkinitcpio`), the Dockerfile bootstraps an Arch Linux ARM container:
+
+```dockerfile
+# Stage 1: Bootstrap ALARM rootfs into a Docker image
+FROM scratch
+ADD ArchLinuxARM-aarch64-latest.tar.gz /
+# Configure ALARM mirrors
+RUN pacman-key --init && pacman-key --populate archlinuxarm
+RUN pacman -Syu --noconfirm
+```
+
+On the M4 Pro (Apple Silicon), this runs natively as aarch64 — no emulation, no QEMU binfmt_misc. The kernel compilation, pacstrap, makepkg, and mkinitcpio all execute at native speed.
+
+- **Base:** Arch Linux ARM rootfs tarball (`archlinuxarm.org/os/ArchLinuxARM-aarch64-latest.tar.gz`)
+- **Build deps:** `base-devel`, `bc`, `bison`, `flex`, `dtc`, `grub`, `dosfstools`, `btrfs-progs`, `mtools`, `arch-install-scripts`, `mkinitcpio`, `android-tools` (for `mkbootimg`)
+- **Estimated build time:** ~20-30 minutes total (kernel ~15 min, rootfs ~10 min, image ~2 min)
 
 ## 4. Kernel Configuration
 
@@ -180,6 +216,14 @@ CONFIG_V4L2_LOOPBACK=m
 # Tickless + high-res timers
 CONFIG_NO_HZ_FULL=y
 CONFIG_HIGH_RES_TIMERS=y
+
+# Container support (for optional docker/podman post-install)
+CONFIG_CGROUP_V2=y
+CONFIG_OVERLAY_FS=y
+CONFIG_VETH=y
+CONFIG_BRIDGE=y
+CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
+CONFIG_IP_NF_NAT=y
 ```
 
 ### Hardware support (provided by sm8150.config, not modified)
@@ -198,21 +242,21 @@ CONFIG_HIGH_RES_TIMERS=y
 ### User account
 
 - **Username:** `nabu`
-- **Default password:** `cachyos` (must change on first login)
+- **Default password:** `cachyos` (enforced change on first login via `chage -d 0 nabu`)
 - **Shell:** zsh (with CachyOS config)
 - **Sudo:** passwordless (convenience for tinkering)
 - **Auto-login:** via SDDM to KDE Plasma Wayland
 
 ### Package list
 
-**Base system:**
+**Base system (official ALARM repos):**
 ```
 base base-devel linux-firmware networkmanager bluez bluez-utils
 sudo openssh btrfs-progs zram-generator iwd wget curl git vim nano
-htop btop neofetch fastfetch man-db man-pages zsh fish
+htop btop fastfetch man-db man-pages zsh fish
 ```
 
-**KDE Plasma:**
+**KDE Plasma (official ALARM repos):**
 ```
 plasma-desktop plasma-nm plasma-pa plasma-systemmonitor
 sddm sddm-kcm bluedevil powerdevil kscreen
@@ -222,37 +266,43 @@ ffmpegthumbs kde-gtk-config phonon-qt6-vlc
 breeze-gtk kdeplasma-addons kdeconnect
 ```
 
-**Tablet-specific:**
+**Tablet-specific (official ALARM repos):**
 ```
-maliit-keyboard maliit-framework
 iio-sensor-proxy
 xdg-desktop-portal-kde
 qt6-virtualkeyboard
+libwacom
 ```
 
-**Touch/pen:**
-```
-xf86-input-wacom libwacom
-```
+Note: `xf86-input-wacom` is excluded — it is X11-only and unused on Wayland. Pen input is handled by libinput + `libwacom` device database.
 
-**Audio/media:**
+**Audio/media (official ALARM repos):**
 ```
 pipewire pipewire-pulse pipewire-alsa wireplumber
-vivaldi (AUR)
 ```
 
-**Dev tools:**
+**Dev tools (official ALARM repos):**
 ```
 python python-pip nodejs npm rustup
-docker podman
 strace lsof iotop powertop
 ```
 
-**Fonts:**
+Note: `docker` and `podman` are excluded from the default install — they require additional kernel config (cgroups v2, overlayfs) which may not be in the sm8150 defconfig, and their daemons consume resources on every boot. Instead, a post-install script `~/bin/install-containers` is provided that enables the required kernel configs, installs docker/podman, and enables their services on demand.
+
+**Fonts (official ALARM repos):**
 ```
 noto-fonts noto-fonts-cjk noto-fonts-emoji
 ttf-fantasque-nerd ttf-fira-sans
 ```
+
+**AUR packages (built during image creation via `makepkg`):**
+```
+vivaldi
+maliit-keyboard
+maliit-framework
+```
+
+Note: `maliit-keyboard` and `maliit-framework` are not in official ALARM repos and must be built from AUR.
 
 ### CachyOS theming packages (all arch=any, built from git)
 
@@ -329,22 +379,28 @@ PBL (SoC ROM, immutable)
 
 ### GRUB configuration
 
+Generated by `build-image.sh` from a template, substituting `KERNEL_VERSION`:
+
 ```
 set default=0
 set timeout=3
 
-menuentry "CachyOS Nabu" {
-    linux /vmlinuz-6.14.11-cachyos-nabu root=PARTLABEL=linux rootflags=subvol=@ rw rootwait quiet splash
-    initrd /initramfs-6.14.11.img
+menuentry "CachyOS Nabu (${KERNEL_VERSION})" {
+    linux /vmlinuz-${KERNEL_VERSION}-cachyos-nabu root=PARTLABEL=linux rootflags=subvol=@ rw rootwait quiet splash
+    initrd /initramfs-${KERNEL_VERSION}-cachyos-nabu.img
     devicetree /sm8150-xiaomi-nabu.dtb
 }
 
-menuentry "CachyOS Nabu (Fallback)" {
-    linux /vmlinuz-6.14.11-backup root=PARTLABEL=linux rootflags=subvol=@ rw rootwait
-    initrd /initramfs-6.14.11.img
+menuentry "CachyOS Nabu (${KERNEL_VERSION}) - Verbose" {
+    linux /vmlinuz-${KERNEL_VERSION}-cachyos-nabu root=PARTLABEL=linux rootflags=subvol=@ rw rootwait loglevel=7
+    initrd /initramfs-${KERNEL_VERSION}-cachyos-nabu.img
     devicetree /sm8150-xiaomi-nabu.dtb
 }
 ```
+
+The second entry boots with verbose logging — useful for debugging boot issues. Both entries use the same kernel; the difference is `quiet splash` vs `loglevel=7`.
+
+Note: mkinitcpio preset is configured to output `initramfs-${KERNEL_VERSION}-cachyos-nabu.img` to match the GRUB references.
 
 ## 8. Flash Process
 
@@ -358,19 +414,48 @@ menuentry "CachyOS Nabu (Fallback)" {
 
 1. Boot tablet into fastboot mode (Volume Down + Power)
 2. Flash UEFI firmware to `boot_b`: `fastboot flash boot_b output/boot.img`
-3. Boot recovery image: `fastboot boot output/recovery.img`
-4. Repartition via adb: delete userdata, create esp (512MB) + linux (remaining)
-5. Flash ESP via adb push + dd
-6. Flash rootfs via adb push + zstdcat + dd
-7. Set active slot: `fastboot set_active b`
-8. Reboot: `fastboot reboot`
+3. Boot our custom recovery image: `fastboot boot output/recovery.img`
+   - This recovery image is built by `recovery/build-recovery.sh` and contains: busybox, parted, sgdisk, dd, zstd, mkfs.fat, mkfs.btrfs
+   - It boots into a minimal shell accessible via `adb shell`
+4. Repartition via adb (GPT partition table, the most dangerous step):
+   ```bash
+   # Backup current partition table
+   adb shell sgdisk --backup=/tmp/gpt-backup.bin /dev/block/sda
+   # Expand GPT table to support more partitions
+   adb shell sgdisk --resize-table 64 /dev/block/sda
+   # Delete userdata (partition 31 in stock layout)
+   adb shell sgdisk --delete=31 /dev/block/sda
+   # Create ESP: partition 31, 512MB, type EF00 (EFI System Partition)
+   adb shell sgdisk --new=31:0:+512M --typecode=31:EF00 --change-name=31:esp /dev/block/sda
+   # Create linux: partition 32, remaining space, type 8300 (Linux filesystem)
+   adb shell sgdisk --new=32:0:0 --typecode=32:8300 --change-name=32:linux /dev/block/sda
+   # Verify partition table
+   adb shell sgdisk --print /dev/block/sda
+   # Format partitions
+   adb shell mkfs.fat -F32 -n ESPNABU /dev/block/sda31
+   # Note: Btrfs rootfs is written as a raw image, not formatted separately
+   ```
+5. Flash ESP via adb push + dd:
+   ```bash
+   adb push output/esp.img /tmp/esp.img
+   adb shell dd if=/tmp/esp.img of=/dev/block/sda31 bs=4M
+   ```
+6. Flash rootfs via adb push + zstdcat + dd:
+   ```bash
+   adb push output/linux.img.zst /tmp/linux.img.zst
+   adb shell "zstdcat /tmp/linux.img.zst | dd of=/dev/block/sda32 bs=4M"
+   ```
+7. Reboot to fastboot: `adb reboot bootloader`
+8. Set active slot: `fastboot set_active b`
+9. Reboot: `fastboot reboot`
 
 ### Recovery options
 
-1. **GRUB fallback kernel** — boots unpatched nabu kernel
-2. **Btrfs snapshots** — rollback filesystem changes
-3. **Fastboot always available** — Volume Down + Power enters fastboot from any state
-4. **Full stock restore** — download Xiaomi official fastboot ROM, flash with Mi Flash Tool
+1. **GRUB verbose entry** — boots same kernel with `loglevel=7` for debugging
+2. **Btrfs snapshots** — rollback filesystem changes (a `fresh-install` snapshot is created on first SSH)
+3. **Fastboot always available** — Volume Down + Power enters fastboot from any state, regardless of OS state
+4. **Reflash from build system** — re-run `flash.sh` to start over with a fresh image
+5. **Full stock restore** — download Xiaomi official fastboot ROM, flash with Mi Flash Tool to restore Android completely
 
 ## 9. First Boot Experience
 

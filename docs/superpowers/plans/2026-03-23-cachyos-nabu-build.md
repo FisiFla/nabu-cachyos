@@ -1420,7 +1420,7 @@ Builds ESP (FAT32 with GRUB arm64-efi + kernel) and rootfs
 - Create: `recovery/fetch-recovery.sh`
 - Create: `image/flash.sh`
 
-- [ ] **Step 1: Write recovery build script**
+- [ ] **Step 1: Write recovery fetch script**
 
 ```bash
 #!/usr/bin/env bash
@@ -1583,9 +1583,9 @@ echo "  3. Or reflash with Xiaomi stock ROM"
 ```bash
 chmod +x recovery/fetch-recovery.sh image/flash.sh
 git add recovery/ image/flash.sh
-git commit -m "feat: add recovery image builder and flash script
+git commit -m "feat: add recovery fetcher and flash script
 
-Recovery: minimal initramfs with partition tools for repartitioning.
+Recovery: downloads pre-built TWRP for nabu (provides adbd + partition tools).
 Flash: full end-to-end script with safety checks, GPT backup,
 repartitioning, ESP + rootfs flashing, and boot slot switching."
 ```

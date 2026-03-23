@@ -1,7 +1,7 @@
 # CachyOS on Xiaomi Pad 5 (nabu) — Design Specification
 
 **Date:** 2026-03-23
-**Status:** Draft
+**Status:** Approved
 **Author:** Claude + Flavio
 
 ## 1. Overview
@@ -22,7 +22,7 @@ Build a CachyOS-flavored Arch Linux ARM distribution for the Xiaomi Pad 5 (coden
 - Camera or microphone support (no mainline drivers exist)
 - Reliable suspend/resume (known kernel limitation on nabu)
 - Rebuilding CachyOS's x86-specific packages for ARM (AMD P-State, TLB broadcast, x86 crypto — these are irrelevant on ARM)
-- Cachy Browser (requires full Firefox/Chromium rebuild — using Vivaldi from AUR instead)
+- Cachy Browser (requires full Firefox/Chromium rebuild — using `vivaldi-multiarch-bin-multiarch-bin` from AUR instead, which provides pre-built aarch64 binaries)
 - Android dual-boot (user opted for Linux-only)
 
 ## 2. Hardware Target
@@ -65,7 +65,7 @@ nabu-cachyos/
 ├── rootfs/
 │   ├── build-rootfs.sh        # pacstrap + package installation + config overlay
 │   ├── packages.txt           # Package list (official repos)
-│   ├── packages-aur.txt       # AUR package list (vivaldi, maliit-keyboard, maliit-framework)
+│   ├── packages-aur.txt       # AUR package list (vivaldi-multiarch-bin, maliit-keyboard, maliit-framework)
 │   ├── pacman-alarm.conf      # pacman.conf pointing at Arch Linux ARM mirrors (mirror.archlinuxarm.org)
 │   └── overlay/               # Files copied directly into the rootfs
 │       ├── etc/
@@ -106,7 +106,7 @@ All build scripts use `set -euo pipefail` and validate each step (patch applicat
 4. Inside Docker, `rootfs/build-rootfs.sh`:
    - Bootstraps Arch Linux ARM via `pacstrap -C pacman-alarm.conf` (uses Arch Linux ARM mirrors at `mirror.archlinuxarm.org`, NOT mainline Arch repos which only serve x86_64)
    - Installs packages from `packages.txt` (official ALARM repos)
-   - Builds and installs AUR packages from `packages-aur.txt` (vivaldi, maliit-keyboard, maliit-framework) using `makepkg` as a non-root build user
+   - Builds and installs AUR packages from `packages-aur.txt` (vivaldi-multiarch-bin, maliit-keyboard, maliit-framework) using `makepkg` as a non-root build user
    - Installs kernel image, modules, DTB
    - Installs nabu-specific firmware blobs to `/usr/lib/firmware/`
    - Copies overlay configs
@@ -297,7 +297,7 @@ ttf-fantasque-nerd ttf-fira-sans
 
 **AUR packages (built during image creation via `makepkg`):**
 ```
-vivaldi
+vivaldi-multiarch-bin
 maliit-keyboard
 maliit-framework
 ```

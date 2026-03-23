@@ -2,12 +2,7 @@
 
 ## Project Status
 
-**Current phase:** Implementation plan approved, ready for execution.
-
-**Plan:** `docs/superpowers/plans/2026-03-23-cachyos-nabu-build.md`
-- Phase 1 (Tasks 1-9): Build system — runs entirely on MacBook, no tablet needed
-- Phase 2 (Task 10): Flash — needs tablet connected via USB-C in fastboot mode
-- To start: invoke `superpowers:subagent-driven-development` or `superpowers:executing-plans` skill
+**Current phase:** Spec approved, ready for implementation planning (writing-plans skill).
 
 The design spec is at `docs/superpowers/specs/2026-03-23-cachyos-nabu-design.md` — read it first, it's the source of truth. It passed spec review (2 rounds, all 16 issues fixed). The user has approved it.
 
@@ -30,7 +25,7 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 2. **Kernel 6.14.11** from `gitlab.com/sm8150-mainline/linux` branch `sm8150/6.14.11` — latest working version. 6.16 doesn't boot on some devices.
 3. **CachyOS patches (ARM-compatible only):** BORE scheduler, BBR3 TCP, ADIOS I/O scheduler, v4l2loopback. All x86-specific patches (AMD P-State, TLB broadcast, x86 crypto, ASUS ROG, Apple T2) are excluded.
 4. **KDE Plasma** with CachyOS theming (Nord theme, dark mode, reduced animations, floating panel)
-5. **Vivaldi** browser (user preference, replaces Firefox. AUR package: `vivaldi-multiarch-bin` which ships pre-built aarch64 binaries. NOT plain `vivaldi` which is x86_64 only.)
+5. **Vivaldi** browser (user preference, replaces Firefox. Available in AUR, good touch/tablet support on Wayland)
 6. **Btrfs** root filesystem with zstd compression, subvolumes (@, @home, @snapshots) for snapshot-based rollback
 7. **UEFI + GRUB boot chain** (TheMojoMan's EDK2 firmware), not raw mkbootimg — allows kernel updates without reflashing boot.img
 8. **Docker builds on ALARM rootfs tarball**, not official `archlinux:latest` (which is x86_64 only)

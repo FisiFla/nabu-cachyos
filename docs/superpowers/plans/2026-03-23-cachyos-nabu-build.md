@@ -656,7 +656,7 @@ capitaine-cursors
 - [ ] **Step 3: Create packages-aur.txt**
 
 ```
-vivaldi
+vivaldi-multiarch-bin
 maliit-keyboard
 maliit-framework
 ```
@@ -666,13 +666,15 @@ maliit-framework
 Create `rootfs/mkinitcpio-nabu.preset`:
 ```bash
 # mkinitcpio preset for CachyOS Nabu kernel
+# IMPORTANT: kernel and initramfs live on the ESP (mounted at /boot/efi)
+# so that GRUB can find them. This must match the GRUB config paths.
 
 ALL_config="/etc/mkinitcpio.conf"
-ALL_kver="/boot/vmlinuz-${KERNEL_VERSION}-cachyos-nabu"
+ALL_kver="/boot/efi/vmlinuz-${KERNEL_VERSION}-cachyos-nabu"
 
 PRESETS=('default')
 
-default_image="/boot/initramfs-${KERNEL_VERSION}-cachyos-nabu.img"
+default_image="/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img"
 ```
 
 - [ ] **Step 5: Create sysctl config**
@@ -913,48 +915,87 @@ Create `rootfs/overlay/home/nabu/bin/kernel-update`:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Default to current known-good version. User can override with argument.
+# WARNING: Not all sm8150-mainline branches boot on nabu. Known-good: 6.14.11.
+# Check https://gitlab.com/sm8150-mainline/linux/-/branches for available branches.
+# Branch 6.16+ does NOT boot on some devices.
+DEFAULT_BRANCH="sm8150/6.14.11"
+BRANCH="${1:-${DEFAULT_BRANCH}}"
+PATCHES_DIR="/opt/nabu-cachyos/patches"
+CONFIG_FILE="/opt/nabu-cachyos/cachyos.config"
+
 echo "=== CachyOS Nabu Kernel Updater ==="
 echo ""
-echo "This will rebuild the kernel from the latest sm8150-mainline source."
 echo "Current kernel: $(uname -r)"
+echo "Target branch:  ${BRANCH}"
+echo ""
+echo "WARNING: Only sm8150/6.14.x branches are known to boot reliably."
+echo "Using an untested branch may make your tablet unbootable."
+echo "Make sure to run 'snapshot pre-kernel-update' first!"
 echo ""
 read -p "Continue? [y/N] " -n 1 -r
 echo
 [[ $REPLY =~ ^[Yy]$ ]] || exit 0
 
 WORK="/tmp/kernel-update"
+rm -rf "${WORK}"
 mkdir -p "${WORK}"
 cd "${WORK}"
 
-# Clone latest
-echo "Cloning latest sm8150-mainline..."
-git clone --depth 1 https://gitlab.com/sm8150-mainline/linux.git
+# Clone specific branch
+echo "Cloning sm8150-mainline branch ${BRANCH}..."
+git clone --depth 1 --branch "${BRANCH}" \
+    https://gitlab.com/sm8150-mainline/linux.git
 cd linux
 
-# TODO: Apply CachyOS patches from /opt/nabu-cachyos/patches/
-echo "NOTE: You may want to apply CachyOS patches manually."
-echo "Patches should be at /opt/nabu-cachyos/patches/ if installed."
+# Apply CachyOS patches if available
+if [ -d "${PATCHES_DIR}" ]; then
+    echo "Applying CachyOS patches..."
+    for patch in "${PATCHES_DIR}"/*.patch; do
+        patchname="$(basename "${patch}")"
+        echo "  ${patchname}..."
+        git apply --check "${patch}" 2>/dev/null && git apply "${patch}" || {
+            echo "  WARNING: ${patchname} did not apply cleanly, skipping."
+        }
+    done
+else
+    echo "WARNING: No patches found at ${PATCHES_DIR}"
+    echo "Kernel will be built without CachyOS patches (BORE, BBR3, ADIOS)."
+fi
 
-# Build
+# Build config
+echo "Configuring kernel..."
 make defconfig
 scripts/kconfig/merge_config.sh -m .config arch/arm64/configs/sm8150.config
-# Apply cachyos config if available
-[ -f /opt/nabu-cachyos/cachyos.config ] && \
-    scripts/kconfig/merge_config.sh -m .config /opt/nabu-cachyos/cachyos.config
+[ -f "${CONFIG_FILE}" ] && \
+    scripts/kconfig/merge_config.sh -m .config "${CONFIG_FILE}"
 make olddefconfig
+
+# Compile
+echo "Compiling kernel (this takes ~15 minutes)..."
 make -j$(nproc) Image.gz dtbs modules
 
 # Install
 KVER=$(make kernelversion)
+echo "Installing kernel ${KVER}..."
 sudo make modules_install
-sudo cp arch/arm64/boot/Image.gz "/boot/vmlinuz-${KVER}-cachyos-nabu"
-sudo cp arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb /boot/
-sudo mkinitcpio -g "/boot/initramfs-${KVER}-cachyos-nabu.img" -k "${KVER}"
+sudo cp arch/arm64/boot/Image.gz "/boot/efi/vmlinuz-${KVER}-cachyos-nabu"
+sudo cp arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb /boot/efi/
+sudo mkinitcpio -g "/boot/efi/initramfs-${KVER}-cachyos-nabu.img" -k "${KVER}"
+
+# Update GRUB config
+echo "Updating GRUB config..."
+sudo sed -i "s|vmlinuz-[0-9.]\\+-cachyos-nabu|vmlinuz-${KVER}-cachyos-nabu|g" /boot/efi/grub/grub.cfg
+sudo sed -i "s|initramfs-[0-9.]\\+-cachyos-nabu|initramfs-${KVER}-cachyos-nabu|g" /boot/efi/grub/grub.cfg
 
 echo ""
-echo "Kernel ${KVER} installed. Update /boot/efi/grub/grub.cfg to reference the new version."
+echo "Kernel ${KVER} installed and GRUB updated."
 echo "Reboot to use the new kernel."
+echo "If it doesn't boot, select Verbose mode in GRUB to see what's wrong."
 ```
+
+Note: The script defaults to the known-good `sm8150/6.14.11` branch but allows overriding with an argument (e.g., `kernel-update sm8150/6.15.3`). CachyOS patches and config are applied from `/opt/nabu-cachyos/` which is populated during the initial build. The script installs kernel artifacts to `/boot/efi/` (the ESP mount point) and updates the GRUB config in-place — matching the boot path layout.
 
 - [ ] **Step 15: Make convenience scripts executable and commit**
 
@@ -985,21 +1026,36 @@ set -euo pipefail
 
 ROOTFS="${1:?Usage: build-theming.sh <rootfs-path>}"
 THEME_BUILD="/tmp/theming-build"
-mkdir -p "${THEME_BUILD}"
+PKGBUILDS_REPO="https://github.com/CachyOS/CachyOS-PKGBUILDS.git"
 
 echo "--- Building CachyOS theming packages ---"
 
-# Helper: clone repo, build PKGBUILD, install to rootfs
+# IMPORTANT: All CachyOS PKGBUILDs live in the CachyOS-PKGBUILDS repo, NOT
+# in the individual asset repos (cachyos-kde-settings, cachyos-wallpapers, etc).
+# The asset repos contain the source files; CachyOS-PKGBUILDS contains the
+# packaging recipes that reference those sources. We clone PKGBUILDS once and
+# build each package from its subdirectory.
+
+mkdir -p "${THEME_BUILD}"
+cd "${THEME_BUILD}"
+
+if [ ! -d "CachyOS-PKGBUILDS" ]; then
+    echo "Cloning CachyOS-PKGBUILDS..."
+    git clone --depth 1 "${PKGBUILDS_REPO}" CachyOS-PKGBUILDS
+fi
+
+# Helper: build a PKGBUILD from CachyOS-PKGBUILDS/<subdir> and install to rootfs
 build_and_install() {
-    local name="$1" repo="$2" branch="${3:-master}" subdir="${4:-.}"
-    echo "  Building ${name}..."
-    cd "${THEME_BUILD}"
-    if [ ! -d "${name}" ]; then
-        git clone --depth 1 --branch "${branch}" "${repo}" "${name}"
-    fi
-    cd "${name}/${subdir}"
+    local subdir="$1"
+    echo "  Building ${subdir}..."
+    cd "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}"
+
     # Build as non-root user (makepkg requirement)
-    sudo -u builder makepkg -f --noconfirm 2>/dev/null || makepkg -f --noconfirm
+    sudo -u builder makepkg -f --noconfirm --syncdeps 2>&1 || {
+        echo "    WARNING: makepkg failed for ${subdir}, attempting without deps..."
+        sudo -u builder makepkg -f --noconfirm 2>&1 || true
+    }
+
     # Install into target rootfs (use arch-chroot so install hooks run correctly)
     local pkg
     pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
@@ -1009,44 +1065,19 @@ build_and_install() {
         rm "${ROOTFS}/tmp/$(basename "${pkg}")"
         echo "    Installed ${pkg}"
     else
-        echo "    WARNING: No package produced for ${name}"
+        echo "    WARNING: No package produced for ${subdir}"
     fi
 }
 
-# CachyOS KDE settings (dark mode, floating panel, reduced animations)
-build_and_install "cachyos-kde-settings" \
-    "https://github.com/CachyOS/cachyos-kde-settings.git" "develop"
-
-# CachyOS wallpapers
-build_and_install "cachyos-wallpapers" \
-    "https://github.com/CachyOS/cachyos-wallpapers.git" "develop"
-
-# CachyOS SDDM themes
-build_and_install "cachyos-themes-sddm" \
-    "https://github.com/StarterX4/cachyos-themes-sddm.git"
-
-# CachyOS Nord KDE theme
-build_and_install "cachyos-nord-kde" \
-    "https://github.com/CachyOS/CachyOS-Nord-KDE.git"
-
-# char-white cursor theme
-build_and_install "char-white" \
-    "https://github.com/CachyOS/char-white.git"
-
-# CachyOS Plymouth boot animation (from CachyOS-PKGBUILDS repo)
-build_and_install "cachyos-pkgbuilds-plymouth" \
-    "https://github.com/CachyOS/CachyOS-PKGBUILDS.git" "master" \
-    "cachyos-plymouth-bootanimation"
-
-# CachyOS fish config
-build_and_install "cachyos-pkgbuilds-fish" \
-    "https://github.com/CachyOS/CachyOS-PKGBUILDS.git" "master" \
-    "cachyos-fish-config"
-
-# CachyOS zsh config
-build_and_install "cachyos-pkgbuilds-zsh" \
-    "https://github.com/CachyOS/CachyOS-PKGBUILDS.git" "master" \
-    "cachyos-zsh-config"
+# All packages from CachyOS-PKGBUILDS repo
+build_and_install "cachyos-kde-settings"
+build_and_install "cachyos-wallpapers"
+build_and_install "cachyos-themes-sddm"
+build_and_install "cachyos-nord-kde"
+build_and_install "char-white"
+build_and_install "cachyos-plymouth-bootanimation"
+build_and_install "cachyos-fish-config"
+build_and_install "cachyos-zsh-config"
 
 echo "--- Theming packages installed ---"
 ```
@@ -1094,17 +1125,27 @@ mkdir -p "${ROOTFS}"
 pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
     $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
 
-# 2. Install kernel
+# 2. Install kernel to /boot/efi/ (the ESP mount point)
+# IMPORTANT: kernel artifacts live on the ESP so GRUB can find them.
+# /boot/efi/ is where the ESP partition is mounted (see fstab).
+# This ensures build-time placement matches runtime updates (mkinitcpio, kernel-update).
 echo "Installing kernel..."
+mkdir -p "${ROOTFS}/boot/efi"
 install -Dm644 "${KERNEL_DIR}/Image.gz" \
-    "${ROOTFS}/boot/vmlinuz-${KERNEL_VERSION}-cachyos-nabu"
+    "${ROOTFS}/boot/efi/vmlinuz-${KERNEL_VERSION}-cachyos-nabu"
 install -Dm644 "${KERNEL_DIR}/sm8150-xiaomi-nabu.dtb" \
-    "${ROOTFS}/boot/sm8150-xiaomi-nabu.dtb"
+    "${ROOTFS}/boot/efi/sm8150-xiaomi-nabu.dtb"
 
 # Install kernel modules
 cp -a "${KERNEL_DIR}/modules/lib/modules" "${ROOTFS}/usr/lib/modules"
 
-# 3. Install nabu firmware blobs
+# 3. Install CachyOS patches and config for runtime kernel-update script
+echo "Installing CachyOS patches to /opt/nabu-cachyos/..."
+mkdir -p "${ROOTFS}/opt/nabu-cachyos/patches"
+cp /build/kernel/patches/*.patch "${ROOTFS}/opt/nabu-cachyos/patches/"
+cp /build/kernel/cachyos.config "${ROOTFS}/opt/nabu-cachyos/"
+
+# 4. Install nabu firmware blobs
 echo "Installing firmware..."
 cp -a "${FIRMWARE_DIR}"/* "${ROOTFS}/usr/lib/firmware/" 2>/dev/null || true
 
@@ -1112,12 +1153,27 @@ cp -a "${FIRMWARE_DIR}"/* "${ROOTFS}/usr/lib/firmware/" 2>/dev/null || true
 echo "Applying overlay configs..."
 cp -a "${SCRIPT_DIR}/overlay/"* "${ROOTFS}/"
 
-# 5. Substitute WiFi credentials (use | delimiter to handle special chars in passwords)
+# 5. Write WiFi connection file directly (avoids sed fragility with special chars)
 echo "Configuring WiFi..."
-sed -i "s|WIFI_SSID_PLACEHOLDER|${WIFI_SSID}|" \
-    "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection"
-sed -i "s|WIFI_PASSWORD_PLACEHOLDER|${WIFI_PASSWORD}|" \
-    "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection"
+cat > "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection" << NMEOF
+[connection]
+id=Home WiFi
+type=wifi
+autoconnect=true
+
+[wifi]
+ssid=${WIFI_SSID}
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=${WIFI_PASSWORD}
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
+NMEOF
 chmod 600 "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection"
 
 # 6. Install mkinitcpio preset (use sed instead of envsubst for portability)
@@ -1135,7 +1191,7 @@ for pkg in $(cat "${SCRIPT_DIR}/packages-aur.txt" | grep -v '^#' | grep -v '^$')
     sudo -u builder git clone --depth 1 "https://aur.archlinux.org/${pkg}.git" || true
     cd "${pkg}"
     sudo -u builder makepkg -s --noconfirm 2>/dev/null || makepkg -s --noconfirm
-    local pkgfile=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
+    pkgfile=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkgfile}" ]; then
         cp "${pkgfile}" "${ROOTFS}/tmp/"
         arch-chroot "${ROOTFS}" pacman -U --noconfirm "/tmp/${pkgfile}"
@@ -1224,6 +1280,9 @@ WiFi, SSH, auto-login, mkinitcpio, fstab."
 - [ ] **Step 1: Create GRUB config template**
 
 Create `image/grub.cfg.template`:
+
+Note on boot path consistency: GRUB runs from the ESP. The ESP is mounted at `/boot/efi` on the running system. GRUB paths are relative to the ESP root, so `/vmlinuz-...` in GRUB config corresponds to `/boot/efi/vmlinuz-...` on the running filesystem. All kernel artifacts (vmlinuz, initramfs, DTB) live on the ESP so that both the build-time image assembly and runtime updates (mkinitcpio, kernel-update) write to the same location GRUB reads from.
+
 ```
 set default=0
 set timeout=3
@@ -1291,9 +1350,10 @@ sed "s/KERNEL_VERSION_PLACEHOLDER/${KERNEL_VERSION}/g" \
     "${SCRIPT_DIR}/grub.cfg.template" > "${ESP_MNT}/grub/grub.cfg"
 
 # Copy kernel, initramfs, DTB to ESP
-cp "${ROOTFS}/boot/vmlinuz-${KERNEL_VERSION}-cachyos-nabu" "${ESP_MNT}/"
-cp "${ROOTFS}/boot/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" "${ESP_MNT}/"
-cp "${ROOTFS}/boot/sm8150-xiaomi-nabu.dtb" "${ESP_MNT}/"
+# These were installed to /boot/efi/ in the rootfs (the ESP mount point)
+cp "${ROOTFS}/boot/efi/vmlinuz-${KERNEL_VERSION}-cachyos-nabu" "${ESP_MNT}/"
+cp "${ROOTFS}/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" "${ESP_MNT}/"
+cp "${ROOTFS}/boot/efi/sm8150-xiaomi-nabu.dtb" "${ESP_MNT}/"
 
 umount "${ESP_MNT}"
 echo "  ESP image: ${ESP_IMG} ($(du -h "${ESP_IMG}" | cut -f1))"
@@ -1370,31 +1430,50 @@ OUTPUT="/build/output"
 WORK="/tmp/recovery-build"
 
 echo "--- Building recovery image ---"
-mkdir -p "${WORK}/rootfs"
 
-# Install minimal tools into a temporary rootfs
-pacstrap -K "${WORK}/rootfs" busybox parted gptfdisk zstd dosfstools btrfs-progs
+# IMPORTANT: The flash process depends on `adb shell`, `adb push`, and `adb pull`
+# after booting this recovery image. This means the recovery MUST include and
+# start `adbd` (the Android Debug Bridge daemon).
+#
+# Rather than building a custom initramfs from scratch (which requires getting
+# adbd, USB gadget config, and init exactly right), we use a proven approach:
+# download an existing TWRP or minimal recovery image for nabu that already
+# has adb support baked in.
 
-# Create a minimal initramfs
-cd "${WORK}/rootfs"
-find . | cpio -H newc -o | gzip > "${WORK}/initramfs.cpio.gz"
+mkdir -p "${OUTPUT}"
 
-# Package as Android boot.img
-# Use the same kernel from our build (just need it to boot far enough for adb)
-mkbootimg \
-    --kernel "/build/output/kernel/Image.gz" \
-    --ramdisk "${WORK}/initramfs.cpio.gz" \
-    --cmdline "console=tty0 rdinit=/bin/busybox sh" \
-    --base 0x00000000 \
-    --kernel_offset 0x00008000 \
-    --tags_offset 0x00000100 \
-    --pagesize 4096 \
-    -o "${OUTPUT}/recovery.img"
+# Option A (preferred): Download a known-working TWRP recovery for nabu
+# TWRP includes adb, parted, sgdisk, dd, and more out of the box.
+TWRP_URL="https://dl.twrp.me/nabu/twrp-3.7.1_12-0-nabu.img"
+if [ ! -f "${OUTPUT}/recovery.img" ]; then
+    echo "Downloading TWRP recovery for nabu..."
+    wget -O "${OUTPUT}/recovery.img" "${TWRP_URL}" 2>/dev/null || {
+        echo "WARNING: TWRP download failed. Trying alternative..."
+        # Option B: Use the recovery from the nabu-alarm project or TheMojoMan
+        # The user can also manually place a recovery.img in output/
+        echo "Please manually download a TWRP recovery for nabu and place it at:"
+        echo "  ${OUTPUT}/recovery.img"
+        echo ""
+        echo "Sources:"
+        echo "  - https://dl.twrp.me/nabu/"
+        echo "  - https://xdaforums.com/t/recovery-unofficial-twrp-for-xiaomi-pad-5.4595499/"
+        exit 1
+    }
+fi
 
-echo "--- Recovery image: ${OUTPUT}/recovery.img ---"
+# Verify the recovery image exists and is not empty
+if [ ! -s "${OUTPUT}/recovery.img" ]; then
+    echo "ERROR: recovery.img is empty or missing."
+    exit 1
+fi
+
+echo "--- Recovery image ready: ${OUTPUT}/recovery.img ---"
+echo "This recovery provides: adb shell, parted, sgdisk, dd, mkfs"
 ```
 
-Note: This is a simplified approach. The recovery image may need the nabu DTB appended to the kernel image. If `fastboot boot recovery.img` doesn't work during Phase 2, we'll need to concatenate `Image.gz + sm8150-xiaomi-nabu.dtb` as the kernel, or use an existing TWRP recovery for nabu instead.
+Note: We use a pre-built TWRP recovery instead of building our own initramfs. Building a custom recovery that correctly initializes adbd (including USB gadget configuration, init scripts, and the adbd binary itself) is non-trivial and error-prone. TWRP for nabu is battle-tested and includes everything we need (adb, partition tools, filesystem tools). If the TWRP URL changes, check https://dl.twrp.me/nabu/ for the latest version, or use any nabu-compatible recovery that supports `adb shell`.
+
+The flash script's `adb shell` commands (sgdisk, dd, mkfs) all depend on tools present in TWRP. If using a different recovery, verify these tools are available before proceeding.
 
 - [ ] **Step 2: Write flash script**
 

@@ -39,7 +39,7 @@ build_and_install() {
     local pkg
     pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkg}" ]; then
-        pacman -U --noconfirm --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+        pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
             "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}/${pkg}"
         echo "    Installed ${pkg}"
     else

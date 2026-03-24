@@ -1,19 +1,23 @@
 # Session Context
 
-## Current Task
-CachyOS with custom BORE kernel running on Xiaomi Pad 5!
+## Current State
+CachyOS ARM running on Xiaomi Pad 5 with GNOME + working on-screen keyboard.
 
-## Key Achievements
-- CachyOS kernel (BORE v5.9.6 + ADIOS + 1000Hz + PREEMPT) compiled and booting
-- KDE Plasma desktop working with touch
-- WiFi working (ath10k via Qualcomm QMI stack)
-- Audio speakers detected (CS35L41 via UCM profiles)
-- 105GB storage, ZRAM swap, BFQ I/O scheduler
-- SSH access, USB serial gadget for debugging
+## What's Working
+- CachyOS kernel (BORE v5.9.6 + ADIOS + 1000Hz + PREEMPT)
+- GNOME Shell 49 on Wayland with touch + on-screen keyboard
+- WiFi (ath10k via Qualcomm QMI stack)
+- Audio speakers (CS35L41 via UCM profiles)
+- GDM auto-login
+- SSH access
+- CachyOS branding + 11 CachyOS packages
+- Mesa -O3 ARMv8.2-A optimized
+- Full zsh stack (oh-my-zsh, powerlevel10k, fzf)
+- Dynamic CPU governor, ADIOS I/O, MGLRU, ZRAM
+- 105GB storage, 852 packages
 
 ## Next Steps
-- Fix on-screen virtual keyboard (KDE 6 Wayland issue — QT_IM_MODULE crashes session)
-- Rebuild key packages with aarch64 optimizations (Mesa, PipeWire) for full CachyOS experience
-- Auto-rotation needs accelerometer driver in kernel (not currently enabled)
-- Update build scripts to use CachyOS kernel by default instead of TheMojoMan's
-- CachyOS branding (os-release, etc.)
+- Auto-rotation (needs accelerometer kernel driver)
+- CachyOS ARM image for Parallels Desktop (future project, easy)
+- Clean up KDE overlay files still in repo (SDDM configs etc)
+- Consider building more packages with LTO (PipeWire, systemd)

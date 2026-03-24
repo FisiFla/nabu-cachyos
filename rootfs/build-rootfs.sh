@@ -129,6 +129,31 @@ done
 echo "Installing CachyOS theming..."
 bash "${SCRIPT_DIR}/build-theming.sh" "${ROOTFS}"
 
+# 8b. Build and install additional CachyOS tools
+echo "Building CachyOS tools..."
+TOOLS_BUILD="/tmp/cachyos-tools"
+mkdir -p "${TOOLS_BUILD}"
+chown builder:builder "${TOOLS_BUILD}"
+cd "${TOOLS_BUILD}"
+if [ ! -d "CachyOS-PKGBUILDS" ]; then
+    sudo -u builder git clone --depth 1 https://github.com/CachyOS/CachyOS-PKGBUILDS.git
+fi
+
+for tool in cachyos-settings cachyos-alacritty-config; do
+    echo "  Building ${tool}..."
+    cd "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}"
+    sudo -u builder makepkg -f --noconfirm --nodeps --skipinteg 2>&1 || {
+        echo "    WARNING: ${tool} failed, skipping"
+        continue
+    }
+    pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
+    if [ -n "${pkg}" ]; then
+        pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+            "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}/${pkg}"
+        echo "    Installed ${pkg}"
+    fi
+done
+
 # 9. System configuration
 echo "Configuring system..."
 
@@ -149,6 +174,9 @@ echo "nabu:cachyos" | arch-chroot "${ROOTFS}" chpasswd
 echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" > "${ROOTFS}/etc/sudoers.d/wheel"
 chmod 440 "${ROOTFS}/etc/sudoers.d/wheel"
 
+# Copy skel dotfiles to user home (packages install to /etc/skel/)
+cp -rn "${ROOTFS}/etc/skel/." "${ROOTFS}/home/nabu/" 2>/dev/null || true
+
 # Convenience scripts permissions
 chmod +x "${ROOTFS}/home/nabu/bin/"* 2>/dev/null || true
 chown -R 1000:1000 "${ROOTFS}/home/nabu/"
@@ -161,6 +189,8 @@ arch-chroot "${ROOTFS}" systemctl enable sddm
 arch-chroot "${ROOTFS}" systemctl enable bluetooth
 arch-chroot "${ROOTFS}" systemctl enable systemd-zram-setup@zram0.service
 arch-chroot "${ROOTFS}" systemctl enable cpu-performance.service
+# USB serial gadget for debugging
+arch-chroot "${ROOTFS}" systemctl enable usb-serial-gadget.service 2>/dev/null || true
 # Disable heavy/unnecessary services for tablet use
 arch-chroot "${ROOTFS}" systemctl disable man-db.timer 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl mask ldconfig.service 2>/dev/null || true

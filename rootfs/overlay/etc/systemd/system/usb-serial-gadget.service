@@ -1,0 +1,11 @@
+[Unit]
+Description=USB Serial Gadget
+After=sys-kernel-config.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/usb-serial-gadget.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

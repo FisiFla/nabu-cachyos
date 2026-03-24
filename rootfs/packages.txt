@@ -74,3 +74,4 @@ plymouth
 grub
 capitaine-cursors
 firefox
+alacritty

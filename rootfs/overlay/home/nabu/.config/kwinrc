@@ -2,7 +2,6 @@
 Backend=OpenGL
 
 [Wayland]
-InputMethod=qtvirtualkeyboard
 VirtualKeyboardEnabled=true
 
 [Plugins]
@@ -13,3 +12,6 @@ Bottom=None
 Left=None
 Right=None
 Top=None
+
+[Xwayland]
+Scale=1.9

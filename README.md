@@ -6,9 +6,10 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 
 - **Arch Linux ARM** base system bootstrapped via `pacstrap` inside Docker
 - **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.14.11`) with CachyOS patches: **BORE scheduler**, **ADIOS I/O scheduler**, BBR3 TCP, cachy-arm (HZ tuning, PREEMPT_LAZY, THP, v4l2loopback)
-- **10 CachyOS packages**: `cachyos-kde-settings`, `cachyos-wallpapers`, `cachyos-themes-sddm`, `cachyos-nord-kde`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`
+- **11 CachyOS packages**: `cachyos-kde-settings`, `cachyos-wallpapers`, `cachyos-themes-sddm`, `cachyos-nord-kde`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, `cachyos-packageinstaller`
+- **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
 - **Mesa rebuilt** with `-O3` ARMv8.2-A optimizations for Adreno 640
-- **KDE Plasma 6** desktop with touch-friendly settings (reduced animations, on-screen keyboard via Maliit)
+- **KDE Plasma 6** desktop with touch-friendly settings (reduced animations, 150% scaling)
 - **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)
 - **Alacritty** terminal with CachyOS config
 - **Audio UCM profiles** for nabu speakers and microphone
@@ -17,7 +18,7 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 - **ADIOS I/O scheduler** set via udev rules
 - **CachyOS branding**: custom `os-release`, fastfetch logo, Plymouth boot animation
 - **USB serial gadget** for debugging via USB-C cable
-- **UEFI + GRUB boot chain** using TheMojoMan's EDK2 firmware
+- **Direct boot** via Android boot.img format (CachyOS kernel + DTB, no GRUB)
 - WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
 - Headless first boot: auto-connects to WiFi, auto-login via SDDM, SSH enabled
 
@@ -38,7 +39,8 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 | USB-C cable | Direct connection between build machine and tablet |
 | fastboot / adb | `brew install android-platform-tools` on macOS |
 | Ubuntu nabu image | TheMojoMan's Ubuntu 25.04 image (source for Qualcomm userspace binaries). Place at `../nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img` relative to this repo |
-| UEFI boot.img | Download `boot_6.14.11-nabu-tmm_linux.img` from [TheMojoMan's mega.nz](https://mega.nz/folder/CVMGEAiB#7oazR3wpkKdAH2eZChtRTg) and place at `output/boot.img` |
+| TheMojoMan boot.img | Download `boot_6.14.11-nabu-tmm_linux.img` from [TheMojoMan's mega.nz](https://mega.nz/folder/CVMGEAiB#7oazR3wpkKdAH2eZChtRTg) and place at `output/boot.img`. Used as fallback; the build also produces a CachyOS kernel boot.img |
+| vbmeta_disabled.img | Download from same mega.nz folder. Required to disable Android Verified Boot |
 
 ## Quick Start
 
@@ -122,7 +124,7 @@ If the tablet does not boot:
 | Account | Password | Notes |
 |---|---|---|
 | `nabu` | `cachyos` | Regular user, passwordless sudo, member of wheel/video/audio/input |
-| `root` | *(no password set)* | SSH root login enabled via `PermitRootLogin yes` |
+| `root` | `cachyos` | SSH root login enabled via `PermitRootLogin yes` |
 
 SSH is enabled by default. Connect after boot:
 ```bash
@@ -137,42 +139,64 @@ ssh nabu@<tablet-ip>
 - **GPU firmware** -- `a630_sqe.fw` loads via fallback symlink; 3D acceleration works but may not be optimal
 - **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them
 - **dbus-broker replaced with dbus-daemon** -- the nabu kernel lacks namespace support required by dbus-broker; the build replaces it with classic dbus-daemon
+- **On-screen keyboard** -- Qt6 Virtual Keyboard is installed but KDE 6 Wayland integration is broken (setting QT_IM_MODULE crashes Plasma). Needs external USB/BT keyboard for text input
+- **Auto-rotation** -- accelerometer driver not enabled in kernel; screen stays in portrait
 - **Pen pressure sensitivity** -- does not work in landscape mode (known upstream issue)
-- **No USB keyboard required** -- first boot is fully headless (auto-WiFi, auto-login, SSH)
+- **No USB keyboard required for setup** -- first boot is fully headless (auto-WiFi, auto-login, SSH). But you'll need a keyboard for daily use until on-screen keyboard is fixed
 
 ### Parity with CachyOS x86
 
-This build achieves roughly **70-75% parity** with a full CachyOS x86 desktop install:
+This build achieves roughly **82% parity** with a full CachyOS x86 KDE desktop install:
 
-| Feature | Status |
-|---|---|
-| BORE scheduler | Applied |
-| ADIOS I/O scheduler | Applied |
-| BBR3 TCP | Best-effort (may not apply to sm8150 tree) |
-| MGLRU | Enabled |
-| CachyOS sysctl tuning | Applied (via overlay + cachyos-settings) |
-| ZRAM with zstd | Enabled |
-| CachyOS theming (Nord, wallpapers, SDDM) | Full |
-| CachyOS Plymouth boot animation | Installed |
-| CachyOS shell configs (fish + zsh) | Installed |
-| CachyOS os-release branding | Applied |
-| CachyOS Alacritty config | Installed |
-| KDE Plasma 6 + touch optimizations | Configured |
-| Dynamic CPU governor | Custom (performance/schedutil based on charging) |
-| Audio (speakers) | UCM profiles installed |
-| Mesa ARMv8.2-A optimizations | Rebuilt with -O3 |
-| x86-specific patches (AMD P-State, TLB broadcast, x86 crypto) | N/A -- excluded |
-| CachyOS repo packages | N/A -- x86-only repos, built from PKGBUILDS instead |
+| Category | Feature | Status |
+|---|---|---|
+| **Kernel** | BORE scheduler v5.9.6 | Applied |
+| | ADIOS I/O scheduler | Applied + active |
+| | 1000Hz timer tick | Applied |
+| | Full preemption (PREEMPT) | Applied |
+| | BBR3 TCP | Skipped (sm8150 conflict) |
+| | sched-ext | Config enabled |
+| **System** | CachyOS sysctl tuning | Full (via cachyos-settings) |
+| | MGLRU | Enabled |
+| | ZRAM zstd compression | Enabled |
+| | systemd tuning (timeouts, limits) | Applied |
+| | Coredump limits | Applied |
+| | Dynamic CPU governor | Custom (charge/battery) |
+| **Desktop** | KDE Plasma 6 + Wayland | Running |
+| | CachyOS Nord theme | Applied |
+| | CachyOS wallpapers | Installed |
+| | CachyOS SDDM theme | Applied |
+| | CachyOS Plymouth animation | Installed |
+| | char-white cursor | Installed |
+| **Shell** | zsh + oh-my-zsh + powerlevel10k | Full |
+| | zsh-syntax-highlighting | Installed |
+| | zsh-autosuggestions | Installed |
+| | fzf | Installed |
+| | CachyOS fish config | Installed |
+| **Apps** | Alacritty + CachyOS config | Installed |
+| | Firefox (Wayland) | Installed |
+| | Vivaldi (Wayland + GPU) | Installed |
+| | btop | Installed |
+| | CachyOS Package Installer | Installed |
+| **Packages** | cachyos-settings | Installed |
+| | Mesa -O3 ARMv8.2-A | Rebuilt |
+| **Branding** | os-release, fastfetch logo | Applied |
+| | 852 packages total | 11 CachyOS-specific |
+| **N/A** | x86 repo packages (LTO/PGO) | ARM — built from PKGBUILDS |
+| | Proton/Wine gaming | x86 only |
+| | systemd-boot | Direct boot instead |
+| | cachyos-hello | x86 binary |
+| | Multiple kernel variants | Single sm8150 kernel |
 
 ## Technical Details
 
 ### Boot chain
 
 ```
-PBL (ROM) -> XBL -> ABL -> boot.img (UEFI/EDK2) -> GRUB (from ESP) -> CachyOS Kernel + initramfs + DTB
+PBL (ROM) -> XBL -> ABL -> boot.img (CachyOS kernel + DTB, Android bootimg format) -> ext4 rootfs
 ```
 
-The ESP partition contains GRUB (`arm64-efi`), the kernel (`vmlinuz-*`), initramfs, and device tree blob. The rootfs lives on a separate ext4 partition (`PARTLABEL=linux`).
+The boot.img is a direct-boot Android boot image (header v0) containing the CachyOS kernel with DTB appended. Kernel cmdline: `root=PARTLABEL=linux rw fw_devlink=permissive`. The rootfs lives on an ext4 partition (`PARTLABEL=linux`). No GRUB or UEFI involved in the actual boot — the ESP partition exists but is unused.
 
 ### Qualcomm userspace
 

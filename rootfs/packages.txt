@@ -75,3 +75,6 @@ grub
 capitaine-cursors
 firefox
 alacritty
+pkgfile
+zsh-syntax-highlighting
+zsh-autosuggestions

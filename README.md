@@ -5,11 +5,12 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 ## What This Is
 
 - **Arch Linux ARM** base system bootstrapped via `pacstrap` inside Docker
-- **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.14.11`) with CachyOS patches: **BORE scheduler**, **ADIOS I/O scheduler**, BBR3 TCP, cachy-arm (HZ tuning, PREEMPT_LAZY, THP, v4l2loopback)
-- **11 CachyOS packages**: `cachyos-kde-settings`, `cachyos-wallpapers`, `cachyos-themes-sddm`, `cachyos-nord-kde`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, `cachyos-packageinstaller`
+- **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.14.11`) with CachyOS patches: **BORE scheduler**, **ADIOS I/O scheduler**, 1000Hz timer, full preemption
+- **GNOME Shell** desktop on Wayland with **working on-screen keyboard** for touch input
+- **CachyOS GNOME settings** (dark theme, CachyOS wallpapers, dconf tuning)
+- **11 CachyOS packages**: `cachyos-gnome-settings`, `cachyos-wallpapers`, `cachyos-themes-sddm`, `cachyos-nord-kde`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, `cachyos-packageinstaller`
 - **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
 - **Mesa rebuilt** with `-O3` ARMv8.2-A optimizations for Adreno 640
-- **KDE Plasma 6** desktop with touch-friendly settings (reduced animations, 150% scaling)
 - **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)
 - **Alacritty** terminal with CachyOS config
 - **Audio UCM profiles** for nabu speakers and microphone
@@ -20,12 +21,12 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 - **USB serial gadget** for debugging via USB-C cable
 - **Direct boot** via Android boot.img format (CachyOS kernel + DTB, no GRUB)
 - WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
-- Headless first boot: auto-connects to WiFi, auto-login via SDDM, SSH enabled
+- Headless first boot: auto-connects to WiFi, auto-login via GDM, SSH enabled
 
 ## What This Is NOT
 
 - **Not a port of CachyOS x86.** Most CachyOS packages are x86-only. This project uses the nabu-specific kernel from sm8150-mainline and applies only the architecture-neutral CachyOS kernel patches.
-- **Not using TheMojoMan's pre-built kernel.** The kernel is compiled from sm8150-mainline source with CachyOS patches (BORE, BBR3, ADIOS, cachy-arm) layered on top. The `boot.img` contains CachyOS kernel, not TheMojoMan's.
+- **Not using TheMojoMan's pre-built kernel.** The kernel is compiled from sm8150-mainline source with CachyOS patches (BORE, ADIOS, cachy-arm) layered on top. The `boot.img` contains the CachyOS kernel, not TheMojoMan's.
 - **Not a dual-boot setup.** This overwrites the Android userdata partition. The Android slot (slot A) is preserved as a fallback.
 
 ## Prerequisites
@@ -67,12 +68,12 @@ bash image/flash.sh
 | 3/7 | `firmware/fetch-firmware.sh` | Clones [nabu firmware blobs](https://github.com/map220v/nabu-firmware) (WiFi, GPU, BT, audio) |
 | 4/7 | `kernel/build-kernel.sh` | Clones sm8150-mainline kernel, applies CachyOS patches, compiles `Image.gz` + DTB + modules |
 | 5/7 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
-| 6/7 | `image/build-image.sh` | Creates ESP image (GRUB + kernel + initramfs) and ext4 rootfs image (zstd-compressed) |
+| 6/7 | `image/build-image.sh` | Creates ESP image and ext4 rootfs image (zstd-compressed) |
 | 7/7 | `recovery/fetch-recovery.sh` | Downloads TWRP recovery image for flashing |
 
 **Caching:** The kernel build directory (`.cache/kernel-build/`) and pacstrap rootfs (`.cache/pacstrap-rootfs.tar`) persist between builds. Delete `.cache/` to force a full rebuild.
 
-**CachyOS theming** is built from [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS) and includes: `cachyos-kde-settings`, `cachyos-wallpapers`, `cachyos-themes-sddm`, `cachyos-nord-kde`, `char-white` cursor theme, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`.
+**CachyOS theming** is built from [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS) and includes: `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white` cursor theme, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`.
 
 **CachyOS tools** are also built from CachyOS-PKGBUILDS: `cachyos-settings` (sysctl tuning, systemd configs) and `cachyos-alacritty-config`.
 
@@ -105,7 +106,6 @@ The flash process uses TWRP recovery to repartition and write images via ADB.
    - Boot into TWRP recovery
    - Back up the partition table to `output/gpt-backup.bin`
    - Repartition: delete `userdata`, create 1 GB ESP (partition 31) + Linux root (partition 32, remaining space)
-   - Format and flash the ESP image
    - Flash the zstd-compressed rootfs image to the `linux` partition
    - Set active slot to B (`fastboot set_active b`) and reboot
 
@@ -139,14 +139,20 @@ ssh nabu@<tablet-ip>
 - **GPU firmware** -- `a630_sqe.fw` loads via fallback symlink; 3D acceleration works but may not be optimal
 - **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them
 - **dbus-broker replaced with dbus-daemon** -- the nabu kernel lacks namespace support required by dbus-broker; the build replaces it with classic dbus-daemon
-- **On-screen keyboard** -- Qt6 Virtual Keyboard is installed but KDE 6 Wayland integration is broken (setting QT_IM_MODULE crashes Plasma). Needs external USB/BT keyboard for text input
-- **Auto-rotation** -- accelerometer driver not enabled in kernel; screen stays in portrait
+- **Auto-rotation** -- accelerometer driver not enabled in kernel; screen stays in default orientation
 - **Pen pressure sensitivity** -- does not work in landscape mode (known upstream issue)
-- **No USB keyboard required for setup** -- first boot is fully headless (auto-WiFi, auto-login, SSH). But you'll need a keyboard for daily use until on-screen keyboard is fixed
+
+### Why GNOME instead of KDE?
+
+CachyOS officially offers both KDE and GNOME editions. We chose GNOME for the nabu tablet because:
+
+- **Working on-screen keyboard** -- GNOME's built-in OSK works perfectly on Wayland touch devices. KDE Plasma 6's Qt Virtual Keyboard has a focus-loop bug on Wayland that makes it unusable (the keyboard flashes on/off when it appears).
+- **Touch-friendly out of the box** -- GNOME's UI is designed for touch with large tap targets and gesture navigation.
+- **Proven on nabu** -- TheMojoMan's Ubuntu image (which uses GNOME) was confirmed working on this exact hardware.
 
 ### Parity with CachyOS x86
 
-This build achieves roughly **82% parity** with a full CachyOS x86 KDE desktop install:
+This build achieves roughly **82% parity** with a full CachyOS x86 desktop install:
 
 | Category | Feature | Status |
 |---|---|---|
@@ -162,10 +168,10 @@ This build achieves roughly **82% parity** with a full CachyOS x86 KDE desktop i
 | | systemd tuning (timeouts, limits) | Applied |
 | | Coredump limits | Applied |
 | | Dynamic CPU governor | Custom (charge/battery) |
-| **Desktop** | KDE Plasma 6 + Wayland | Running |
-| | CachyOS Nord theme | Applied |
+| **Desktop** | GNOME Shell 49 + Wayland | Running |
+| | On-screen keyboard | Working (GNOME OSK) |
+| | CachyOS GNOME settings | Applied |
 | | CachyOS wallpapers | Installed |
-| | CachyOS SDDM theme | Applied |
 | | CachyOS Plymouth animation | Installed |
 | | char-white cursor | Installed |
 | **Shell** | zsh + oh-my-zsh + powerlevel10k | Full |
@@ -181,7 +187,6 @@ This build achieves roughly **82% parity** with a full CachyOS x86 KDE desktop i
 | **Packages** | cachyos-settings | Installed |
 | | Mesa -O3 ARMv8.2-A | Rebuilt |
 | **Branding** | os-release, fastfetch logo | Applied |
-| | 852 packages total | 11 CachyOS-specific |
 | **N/A** | x86 repo packages (LTO/PGO) | ARM — built from PKGBUILDS |
 | | Proton/Wine gaming | x86 only |
 | | systemd-boot | Direct boot instead |
@@ -196,7 +201,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 KDE desktop i
 PBL (ROM) -> XBL -> ABL -> boot.img (CachyOS kernel + DTB, Android bootimg format) -> ext4 rootfs
 ```
 
-The boot.img is a direct-boot Android boot image (header v0) containing the CachyOS kernel with DTB appended. Kernel cmdline: `root=PARTLABEL=linux rw fw_devlink=permissive`. The rootfs lives on an ext4 partition (`PARTLABEL=linux`). No GRUB or UEFI involved in the actual boot — the ESP partition exists but is unused.
+The boot.img is a direct-boot Android boot image (header v0) containing the CachyOS kernel with DTB appended. Kernel cmdline: `root=PARTLABEL=linux rw fw_devlink=permissive`. The rootfs lives on an ext4 partition (`PARTLABEL=linux`). No GRUB or UEFI involved in the actual boot.
 
 ### Qualcomm userspace
 
@@ -218,8 +223,8 @@ Applied via overlay configs in `rootfs/overlay/` and the `cachyos-settings` pack
 - **MGLRU**: enabled via tmpfiles (`/etc/tmpfiles.d/mglru.conf`)
 - **systemd**: reduced shutdown timeouts, increased file descriptor limits, journal size capped at 50 MB
 - **CPU governor**: dynamic switching via udev power rules (performance on AC, schedutil on battery)
-- **SDDM**: auto-login for user `nabu`, CachyOS theme
-- **Coredump**: CachyOS coredump config
+- **GDM**: auto-login for user `nabu`
+- **Coredump**: disabled storage to save disk space
 
 ### Kernel patches
 
@@ -246,19 +251,20 @@ nabu-cachyos/
 │   ├── build-rootfs.sh         # Bootstraps and configures the rootfs
 │   ├── build-theming.sh        # Builds CachyOS theming packages from PKGBUILDS
 │   ├── packages.txt            # Official repo packages to install
-│   ├── packages-aur.txt        # AUR packages (Vivaldi, Maliit)
+│   ├── packages-aur.txt        # AUR packages (Vivaldi)
 │   ├── pacman-alarm.conf       # Pacman config pointing to ALARM mirrors
 │   ├── mkinitcpio-nabu.preset  # Initramfs generation preset
 │   └── overlay/                # Files copied directly into rootfs
-│       ├── etc/                # System configs (sysctl, ZRAM, SDDM, systemd, udev, os-release, UCM audio)
-│       ├── usr/                # Systemd user services (maliit), UCM audio profiles, USB serial gadget
+│       ├── etc/                # System configs (sysctl, ZRAM, GDM, systemd, udev, os-release, UCM audio)
+│       ├── usr/                # UCM audio profiles, USB serial gadget
 │       └── home/nabu/          # User dotfiles and utility scripts
-│           ├── .config/        # KDE/Plasma config (Nord theme, touch optimizations)
+│           ├── .config/        # GNOME/app configs
+│           ├── .zshrc          # CachyOS zsh config
 │           └── bin/            # Helper scripts (snapshot, rollback, kernel-update, install-containers)
 ├── image/
 │   ├── build-image.sh          # Creates ESP and rootfs images
 │   ├── flash.sh                # Flashes images to tablet via fastboot/adb
-│   └── grub.cfg.template       # GRUB config template
+│   └── grub.cfg.template       # GRUB config template (unused in direct boot)
 ├── recovery/
 │   └── fetch-recovery.sh       # Downloads TWRP recovery image
 └── output/                     # Build artifacts (boot.img, esp.img, linux.img.zst)
@@ -268,7 +274,7 @@ nabu-cachyos/
 
 This project would not be possible without the work of these projects and people:
 
-- **[TheMojoMan](https://github.com/TheMojoMan/xiaomi-nabu)** -- UEFI boot.img (EDK2 firmware) for nabu. The Ubuntu 25.04 nabu image is the source for Qualcomm userspace binaries (rmtfs, tqftpserv, qrtr-ns) that are not available in Arch repos.
+- **[TheMojoMan](https://github.com/TheMojoMan/xiaomi-nabu)** -- Boot.img and UEFI firmware for nabu. The Ubuntu 25.04 nabu image is the source for Qualcomm userspace binaries (rmtfs, tqftpserv, qrtr-ns) that are not available in Arch repos.
 - **[sm8150-mainline](https://gitlab.com/sm8150-mainline/linux)** -- Mainline Linux kernel with Snapdragon 855 (sm8150) support, the foundation for nabu Linux support.
 - **[CachyOS](https://cachyos.org/)** -- Kernel patches (BORE, BBR3, ADIOS), theming packages, system tuning configs, and PKGBUILD recipes via [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS).
 - **[map220v](https://github.com/map220v/nabu-firmware)** -- Nabu-specific firmware blobs (WiFi WCN3991, Adreno 640 GPU, Bluetooth, audio codec) required for hardware functionality.

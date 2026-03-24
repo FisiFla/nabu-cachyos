@@ -1,2 +1,2 @@
-# BFQ for UFS storage (better for interactive tablet use)
-ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="bfq"
+# ADIOS I/O scheduler (CachyOS custom) for UFS storage
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="adios"

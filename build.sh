@@ -31,10 +31,23 @@ mkdir -p "${KERNEL_CACHE}"
 # Step 3: Run build inside Docker
 # Mount a persistent cache volume for the kernel so git clone + compile
 # don't repeat on every retry. Each stage checks if its output exists.
+# Ubuntu nabu image (source for Qualcomm userspace binaries: rmtfs, tqftpserv, qrtr-ns)
+UBUNTU_IMG="${SCRIPT_DIR}/../nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img"
+UBUNTU_MOUNT_ARGS=""
+if [ -f "${UBUNTU_IMG}" ]; then
+    echo "  Found Ubuntu nabu image, will mount for Qualcomm binaries."
+    UBUNTU_MOUNT_ARGS="-v ${UBUNTU_IMG}:/mnt/ubuntu-nabu.img:ro"
+else
+    echo "  WARNING: Ubuntu nabu image not found at ${UBUNTU_IMG}"
+    echo "  Qualcomm userspace binaries (rmtfs, tqftpserv, qrtr-ns) will NOT be available."
+    echo "  Download from: https://github.com/nicknamenerd/xiaomi-nabu"
+fi
+
 echo "[3/7] Starting build inside Docker container..."
 docker run --rm --privileged \
     -v "${SCRIPT_DIR}:/build" \
     -v "${KERNEL_CACHE}:/tmp/kernel-build" \
+    ${UBUNTU_MOUNT_ARGS} \
     -e KERNEL_VERSION="${KERNEL_VERSION}" \
     -e WIFI_SSID="${WIFI_SSID}" \
     -e WIFI_PASSWORD="${WIFI_PASSWORD}" \
@@ -59,9 +72,23 @@ docker run --rm --privileged \
             bash kernel/build-kernel.sh
         fi
 
+        # Mount Ubuntu nabu image if available (for Qualcomm binaries)
+        if [ -f /mnt/ubuntu-nabu.img ]; then
+            echo 'Mounting Ubuntu nabu image for Qualcomm binaries...'
+            mkdir -p /mnt/ubuntu-nabu
+            LOOP_DEV=\$(losetup --find --show --partscan /mnt/ubuntu-nabu.img)
+            # Find the largest partition (the rootfs)
+            ROOTFS_PART=\$(lsblk -rno NAME,SIZE \${LOOP_DEV} | tail -n +2 | sort -k2 -h | tail -1 | awk '{print \"/dev/\" \$1}')
+            mount -o ro \${ROOTFS_PART} /mnt/ubuntu-nabu || echo 'WARNING: Failed to mount Ubuntu image rootfs partition'
+        fi
+
         # Stage 3: Rootfs
         echo '[5/7] Building rootfs...'
         bash rootfs/build-rootfs.sh
+
+        # Cleanup Ubuntu mount
+        umount /mnt/ubuntu-nabu 2>/dev/null || true
+        losetup -D 2>/dev/null || true
 
         # Stage 4: Images
         echo '[6/7] Building images...'

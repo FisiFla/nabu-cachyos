@@ -143,8 +143,7 @@ arch-chroot "${ROOTFS}" ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 # User account
 arch-chroot "${ROOTFS}" useradd -m -G wheel,video,audio,input -s /usr/bin/zsh nabu
 echo "nabu:cachyos" | arch-chroot "${ROOTFS}" chpasswd
-# Force password change on first login
-arch-chroot "${ROOTFS}" chage -d 0 nabu
+# NOTE: Do NOT use chage -d 0 (password expiry breaks SDDM auto-login)
 
 # Passwordless sudo for wheel group
 echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" > "${ROOTFS}/etc/sudoers.d/wheel"
@@ -162,6 +161,135 @@ arch-chroot "${ROOTFS}" systemctl enable sddm
 arch-chroot "${ROOTFS}" systemctl enable bluetooth
 arch-chroot "${ROOTFS}" systemctl enable systemd-zram-setup@zram0.service
 arch-chroot "${ROOTFS}" systemctl --global enable maliit-server.service
+
+# --- Live-debugging fixes (discovered during first boot) ---
+
+# 10a. Replace dbus-broker with dbus-daemon
+# dbus.service is a SYMLINK to dbus-broker.service — rm it and write a real unit file
+echo "Replacing dbus-broker with dbus-daemon..."
+rm -f "${ROOTFS}/usr/lib/systemd/system/dbus.service"
+cat > "${ROOTFS}/usr/lib/systemd/system/dbus.service" << 'DBUSEOF'
+[Unit]
+Description=D-Bus System Message Bus
+Documentation=man:dbus-daemon(1)
+Requires=dbus.socket
+DefaultDependencies=no
+Wants=sysinit.target
+After=sysinit.target basic.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=@/usr/bin/dbus-daemon @dbus-daemon --system --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+ExecReload=/usr/bin/dbus-send --print-reply --system --type=method_call --dest=org.freedesktop.DBus / org.freedesktop.DBus.ReloadConfig
+OOMScoreAdjust=-900
+User=messagebus
+Group=messagebus
+AmbientCapabilities=CAP_AUDIT_WRITE
+DBUSEOF
+# Mask dbus-broker so it never starts
+ln -sf /dev/null "${ROOTFS}/etc/systemd/system/dbus-broker.service"
+# Ensure messagebus user exists
+arch-chroot "${ROOTFS}" getent passwd messagebus >/dev/null 2>&1 || \
+    arch-chroot "${ROOTFS}" useradd -r -s /usr/bin/nologin -d / messagebus
+
+# 10b. NetworkManager sandbox drop-in (kernel doesn't support sandboxing)
+echo "Adding NetworkManager no-sandbox drop-in..."
+mkdir -p "${ROOTFS}/etc/systemd/system/NetworkManager.service.d"
+cat > "${ROOTFS}/etc/systemd/system/NetworkManager.service.d/no-sandbox.conf" << 'NMSDEOF'
+[Service]
+ProtectSystem=no
+ProtectHome=no
+PrivateTmp=no
+PrivateDevices=no
+RestrictNamespaces=no
+NMSDEOF
+
+# 10c. Install Qualcomm userspace services (qrtr-ns, rmtfs, tqftpserv)
+# These binaries are copied from the Ubuntu nabu image mounted at /mnt/ubuntu-nabu
+echo "Installing Qualcomm userspace services..."
+UBUNTU_MNT="/mnt/ubuntu-nabu"
+if [ -d "${UBUNTU_MNT}/usr/bin" ]; then
+    for bin in rmtfs tqftpserv qrtr-ns; do
+        if [ -f "${UBUNTU_MNT}/usr/bin/${bin}" ]; then
+            install -Dm755 "${UBUNTU_MNT}/usr/bin/${bin}" "${ROOTFS}/usr/bin/${bin}"
+            echo "  Installed ${bin}"
+        else
+            echo "  WARNING: ${UBUNTU_MNT}/usr/bin/${bin} not found"
+        fi
+    done
+    # Copy libqrtr libraries
+    cp -a "${UBUNTU_MNT}"/usr/lib/aarch64-linux-gnu/libqrtr* "${ROOTFS}/usr/lib/" 2>/dev/null || \
+        echo "  WARNING: libqrtr libraries not found in Ubuntu image"
+else
+    echo "  WARNING: Ubuntu nabu image not mounted at ${UBUNTU_MNT}, skipping Qualcomm binaries"
+fi
+
+# Create systemd services for Qualcomm daemons (WITHOUT sandboxing)
+cat > "${ROOTFS}/usr/lib/systemd/system/qrtr-ns.service" << 'QRTREOF'
+[Unit]
+Description=QRTR Name Service
+DefaultDependencies=no
+Before=basic.target
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qrtr-ns -f 1
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+QRTREOF
+
+cat > "${ROOTFS}/usr/lib/systemd/system/rmtfs.service" << 'RMTFSEOF'
+[Unit]
+Description=Qualcomm Remote Filesystem Service
+Requires=qrtr-ns.service
+After=qrtr-ns.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rmtfs -o /boot/efi -P -r
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+RMTFSEOF
+
+cat > "${ROOTFS}/usr/lib/systemd/system/tqftpserv.service" << 'TQFTPEOF'
+[Unit]
+Description=Qualcomm TFTP Service
+Requires=qrtr-ns.service
+After=qrtr-ns.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tqftpserv
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+TQFTPEOF
+
+arch-chroot "${ROOTFS}" systemctl enable qrtr-ns.service
+arch-chroot "${ROOTFS}" systemctl enable rmtfs.service
+arch-chroot "${ROOTFS}" systemctl enable tqftpserv.service
+
+# 10d. Mask efi.mount (we handle ESP mounting via fstab)
+echo "Masking efi.mount..."
+ln -sf /dev/null "${ROOTFS}/etc/systemd/system/efi.mount"
+
+# 10e. GPU firmware symlink (adreno needs this at /usr/lib/firmware/a630_sqe.fw)
+echo "Creating GPU firmware symlink..."
+ln -sf qcom/a630_sqe.fw "${ROOTFS}/usr/lib/firmware/a630_sqe.fw"
+
+# 10f. SSH root login
+echo "Enabling SSH root login..."
+mkdir -p "${ROOTFS}/etc/ssh/sshd_config.d"
+echo "PermitRootLogin yes" > "${ROOTFS}/etc/ssh/sshd_config.d/root.conf"
+
+# --- End live-debugging fixes ---
 
 # 11. Generate initramfs (non-fatal: warnings about autodetect/microcode are expected in chroot)
 echo "Generating initramfs..."

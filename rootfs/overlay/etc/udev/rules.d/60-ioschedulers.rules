@@ -1,6 +1,2 @@
-# CachyOS I/O scheduler rules for nabu
-# UFS storage appears as /dev/sda on nabu
-# Try ADIOS first (CachyOS custom), kernel falls back to mq-deadline if unavailable
-ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="adios"
-# Rotational devices (external USB HDDs) use BFQ
-ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="1", ATTR{queue/scheduler}="bfq"
+# BFQ for UFS storage (better for interactive tablet use)
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="bfq"

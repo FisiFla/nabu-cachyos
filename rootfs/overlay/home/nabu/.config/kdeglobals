@@ -1,5 +1,5 @@
 [KDE]
-AnimationDurationFactor=0.25
+AnimationDurationFactor=0.125
 
 [General]
 fixed=Hack,10,-1,5,50,0,0,0,0,0,Regular

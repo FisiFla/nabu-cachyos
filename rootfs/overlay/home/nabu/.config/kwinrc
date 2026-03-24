@@ -2,7 +2,7 @@
 Backend=OpenGL
 
 [Wayland]
-InputMethod=/usr/bin/maliit-keyboard
+InputMethod=qtvirtualkeyboard
 VirtualKeyboardEnabled=true
 
 [Plugins]

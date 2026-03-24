@@ -160,7 +160,10 @@ arch-chroot "${ROOTFS}" systemctl enable sshd
 arch-chroot "${ROOTFS}" systemctl enable sddm
 arch-chroot "${ROOTFS}" systemctl enable bluetooth
 arch-chroot "${ROOTFS}" systemctl enable systemd-zram-setup@zram0.service
-arch-chroot "${ROOTFS}" systemctl --global enable maliit-server.service
+arch-chroot "${ROOTFS}" systemctl enable cpu-performance.service
+# Disable heavy/unnecessary services for tablet use
+arch-chroot "${ROOTFS}" systemctl disable man-db.timer 2>/dev/null || true
+arch-chroot "${ROOTFS}" systemctl mask ldconfig.service 2>/dev/null || true
 
 # --- Live-debugging fixes (discovered during first boot) ---
 

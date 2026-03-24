@@ -211,7 +211,7 @@ chown -R 1000:1000 "${ROOTFS}/home/nabu/"
 echo "Enabling services..."
 arch-chroot "${ROOTFS}" systemctl enable NetworkManager
 arch-chroot "${ROOTFS}" systemctl enable sshd
-arch-chroot "${ROOTFS}" systemctl enable sddm
+arch-chroot "${ROOTFS}" systemctl enable gdm
 arch-chroot "${ROOTFS}" systemctl enable bluetooth
 arch-chroot "${ROOTFS}" systemctl enable systemd-zram-setup@zram0.service
 arch-chroot "${ROOTFS}" systemctl enable cpu-performance.service

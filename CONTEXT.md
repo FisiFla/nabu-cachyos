@@ -1,26 +1,19 @@
 # Session Context
 
 ## Current Task
-CachyOS boots on nabu with WiFi + KDE Plasma desktop working!
+CachyOS with custom BORE kernel running on Xiaomi Pad 5!
 
-## Key Decisions
-- TheMojoMan's boot.img for direct-boot (not UEFI+GRUB)
-- ext4 rootfs (not Btrfs)
-- dbus-daemon instead of dbus-broker (kernel namespace limitations)
-- Qualcomm userspace (rmtfs, tqftpserv, qrtr-ns) copied from Ubuntu — critical for WiFi
-- fw_devlink=permissive in kernel cmdline
-
-## What's Working (live on tablet now)
-- KDE Plasma desktop via SDDM
-- WiFi (wlan0 connected to FUMagenta at 192.168.0.228)
-- SSH access (root@192.168.0.228 with ed25519 key)
-- USB serial gadget (/dev/cu.usbmodemnabu_cachyos1)
-- Bluetooth hardware detected (hci0)
-- Touch screen (NVT firmware loaded)
+## Key Achievements
+- CachyOS kernel (BORE v5.9.6 + ADIOS + 1000Hz + PREEMPT) compiled and booting
+- KDE Plasma desktop working with touch
+- WiFi working (ath10k via Qualcomm QMI stack)
+- Audio speakers detected (CS35L41 via UCM profiles)
+- 105GB storage, ZRAM swap, BFQ I/O scheduler
+- SSH access, USB serial gadget for debugging
 
 ## Next Steps
-- Bake all live fixes into build scripts so rootfs image is correct from first boot
-- Test touch input on KDE Plasma
-- Apply CachyOS theming (Nord theme, wallpapers installed but may need config)
-- Test Vivaldi browser
-- Commit all fixes and update documentation
+- Fix on-screen virtual keyboard (KDE 6 Wayland issue — QT_IM_MODULE crashes session)
+- Rebuild key packages with aarch64 optimizations (Mesa, PipeWire) for full CachyOS experience
+- Auto-rotation needs accelerometer driver in kernel (not currently enabled)
+- Update build scripts to use CachyOS kernel by default instead of TheMojoMan's
+- CachyOS branding (os-release, etc.)

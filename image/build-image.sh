@@ -53,9 +53,9 @@ else
         cp "${ROOTFS}/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" "${ESP_MNT}/"
 fi
 
-# Show ESP contents for debugging
-echo "  ESP contents:"
-find "${ESP_MNT}" -type f | head -20
+# Show key ESP files
+echo "  ESP key files:"
+ls -lh "${ESP_MNT}"/vmlinuz-* "${ESP_MNT}"/initramfs-* "${ESP_MNT}"/sm8150-* "${ESP_MNT}"/EFI/BOOT/* 2>/dev/null
 echo "  GRUB config:"
 cat "${ESP_MNT}/grub/grub.cfg"
 

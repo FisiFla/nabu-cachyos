@@ -1,6 +1,23 @@
 # CachyOS Nabu
 
-A Docker-based build system that produces a flashable CachyOS-flavored Arch Linux ARM image for the **Xiaomi Pad 5 (nabu)** tablet.
+CachyOS ARM for the **Xiaomi Pad 5 (nabu)** — the first CachyOS on an ARM tablet.
+
+## Easy Install (No Building Required)
+
+Download the [latest release](https://github.com/FisiFla/nabu-cachyos/releases/latest), then:
+
+1. Download **all files** from the release into one folder
+2. Boot tablet into fastboot: **Vol Down + Power**
+3. Run: `bash join-and-flash.sh`
+4. Done — CachyOS boots in ~60 seconds!
+
+Requirements: unlocked bootloader, USB-C cable, `fastboot` and `zstd` installed.
+
+---
+
+## Building From Source
+
+This repo also contains a Docker-based build system to produce the image from scratch.
 
 ## What This Is
 

@@ -5,3 +5,4 @@ output/
 *.img
 *.img.zst
 *.tar.gz
+output.old/

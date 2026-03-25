@@ -191,10 +191,11 @@ echo "LANG=en_US.UTF-8" > "${ROOTFS}/etc/locale.conf"
 # Timezone (UTC, user can change later)
 arch-chroot "${ROOTFS}" ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 
-# User account
+# User + root accounts
 arch-chroot "${ROOTFS}" useradd -m -G wheel,video,audio,input -s /usr/bin/zsh nabu
 echo "nabu:cachyos" | arch-chroot "${ROOTFS}" chpasswd
-# NOTE: Do NOT use chage -d 0 (password expiry breaks SDDM auto-login)
+echo "root:cachyos" | arch-chroot "${ROOTFS}" chpasswd
+# NOTE: Do NOT use chage -d 0 (password expiry breaks GDM auto-login)
 
 # Passwordless sudo for wheel group
 echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" > "${ROOTFS}/etc/sudoers.d/wheel"
@@ -265,23 +266,22 @@ RestrictNamespaces=no
 NMSDEOF
 
 # 10c. Install Qualcomm userspace services (qrtr-ns, rmtfs, tqftpserv)
-# These binaries are copied from the Ubuntu nabu image mounted at /mnt/ubuntu-nabu
+# These binaries are bundled in the repo (extracted from TheMojoMan's Ubuntu image)
 echo "Installing Qualcomm userspace services..."
-UBUNTU_MNT="/mnt/ubuntu-nabu"
-if [ -d "${UBUNTU_MNT}/usr/bin" ]; then
+QCOM_DIR="${SCRIPT_DIR}/qualcomm-binaries"
+if [ -d "${QCOM_DIR}" ]; then
     for bin in rmtfs tqftpserv qrtr-ns; do
-        if [ -f "${UBUNTU_MNT}/usr/bin/${bin}" ]; then
-            install -Dm755 "${UBUNTU_MNT}/usr/bin/${bin}" "${ROOTFS}/usr/bin/${bin}"
-            echo "  Installed ${bin}"
-        else
-            echo "  WARNING: ${UBUNTU_MNT}/usr/bin/${bin} not found"
-        fi
+        install -Dm755 "${QCOM_DIR}/${bin}" "${ROOTFS}/usr/bin/${bin}"
+        echo "  Installed ${bin}"
     done
-    # Copy libqrtr libraries
-    cp -a "${UBUNTU_MNT}"/usr/lib/aarch64-linux-gnu/libqrtr* "${ROOTFS}/usr/lib/" 2>/dev/null || \
-        echo "  WARNING: libqrtr libraries not found in Ubuntu image"
+    cp -a "${QCOM_DIR}"/libqrtr* "${ROOTFS}/usr/lib/" 2>/dev/null
+    # Create proper symlink for libqrtr.so.1
+    cd "${ROOTFS}/usr/lib" && ln -sf libqrtr.so.1.1 libqrtr.so.1 2>/dev/null || true
+    cd /build
+    echo "  Qualcomm binaries installed from repo"
 else
-    echo "  WARNING: Ubuntu nabu image not mounted at ${UBUNTU_MNT}, skipping Qualcomm binaries"
+    echo "  ERROR: ${QCOM_DIR} not found! WiFi will NOT work."
+    echo "  Run: extract Qualcomm binaries from Ubuntu nabu image"
 fi
 
 # Create systemd services for Qualcomm daemons (WITHOUT sandboxing)

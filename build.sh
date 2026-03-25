@@ -35,30 +35,13 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
-# Ubuntu nabu image (for Qualcomm WiFi binaries)
-UBUNTU_IMG=""
-for candidate in \
-    "${SCRIPT_DIR}/../nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img" \
-    "${HOME}/Downloads/nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img" \
-    "${SCRIPT_DIR}/ubuntu-25.04.img"; do
-    if [ -f "${candidate}" ]; then
-        UBUNTU_IMG="${candidate}"
-        break
-    fi
-done
-if [ -z "${UBUNTU_IMG}" ]; then
-    echo "ERROR: Ubuntu nabu image not found (required for WiFi/Qualcomm binaries)."
-    echo ""
-    echo "Download from TheMojoMan's mega.nz:"
-    echo "  https://mega.nz/folder/CVMGEAiB#7oazR3wpkKdAH2eZChtRTg"
-    echo ""
-    echo "Place ubuntu-25.04.img in one of:"
-    echo "  ../nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img"
-    echo "  ~/Downloads/nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img"
-    echo "  ./ubuntu-25.04.img"
+# Qualcomm WiFi binaries (bundled in repo)
+if [ ! -f "${SCRIPT_DIR}/rootfs/qualcomm-binaries/rmtfs" ]; then
+    echo "ERROR: Qualcomm WiFi binaries not found at rootfs/qualcomm-binaries/"
+    echo "  These should be in the repo. Try: git checkout rootfs/qualcomm-binaries/"
     exit 1
 fi
-echo "  Ubuntu image: ${UBUNTU_IMG}"
+echo "  Qualcomm binaries: bundled in repo"
 
 # ─── Step 1: Download ALARM rootfs tarball ──────────────────────────
 
@@ -85,7 +68,6 @@ docker build -t nabu-cachyos-builder "${SCRIPT_DIR}"
 echo "[3/7] Starting build inside Docker container..."
 docker run --rm --privileged \
     -v "${SCRIPT_DIR}:/build" \
-    -v "${UBUNTU_IMG}:/mnt/ubuntu-nabu.img:ro" \
     -e KERNEL_VERSION="${KERNEL_VERSION}" \
     -e WIFI_SSID="${WIFI_SSID}" \
     -e WIFI_PASSWORD="${WIFI_PASSWORD}" \
@@ -110,23 +92,9 @@ docker run --rm --privileged \
             bash kernel/build-kernel.sh
         fi
 
-        # Mount Ubuntu nabu image for Qualcomm binaries
-        echo 'Mounting Ubuntu nabu image for Qualcomm binaries...'
-        mkdir -p /mnt/ubuntu-nabu
-        LOOP_DEV=\$(losetup --find --show --partscan /mnt/ubuntu-nabu.img)
-        ROOTFS_PART=\$(lsblk -rno NAME,SIZE \${LOOP_DEV} | tail -n +2 | sort -k2 -h | tail -1 | awk '{print \"/dev/\" \$1}')
-        mount -o ro \${ROOTFS_PART} /mnt/ubuntu-nabu || {
-            echo 'ERROR: Failed to mount Ubuntu image. WiFi will not work.'
-            exit 1
-        }
-
-        # Stage 3: Rootfs
+        # Stage 3: Rootfs (Qualcomm binaries are bundled in repo)
         echo '[5/7] Building rootfs...'
         bash rootfs/build-rootfs.sh
-
-        # Cleanup Ubuntu mount
-        umount /mnt/ubuntu-nabu 2>/dev/null || true
-        losetup -D 2>/dev/null || true
 
         # Stage 4: Images
         echo '[6/7] Building images...'

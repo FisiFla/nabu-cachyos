@@ -95,37 +95,30 @@ bash release/flash.sh
 
 ## Flash Instructions
 
-The flash process uses TWRP recovery to repartition and write images via ADB.
+The flash process uses **fastboot only** — no recovery, no ADB, no repartitioning. It writes directly to slot B, preserving Android on slot A as a fallback.
 
-### Important flash details
+### Prerequisites
 
-- `boot.img` flashed to `boot_b` contains the **CachyOS kernel** (compiled from sm8150-mainline with BORE + ADIOS patches), not TheMojoMan's pre-built kernel
-- `dtbo_b` must be **erased** (`fastboot erase dtbo_b`) to prevent device tree overlay conflicts with the mainline kernel
-- `vbmeta_disabled.img` must be **flashed** to `vbmeta_b` to disable Android Verified Boot (`fastboot flash vbmeta_b vbmeta_disabled.img`)
-- The `linux` partition (partition 32) receives the zstd-compressed ext4 rootfs image
-- Slot B is set as active after flashing; slot A (Android) remains as a recovery fallback
+- `boot.img`, `linux.img.zst`, and `vbmeta_disabled.img` in the same directory as `flash.sh`
+- `fastboot` installed (`brew install android-platform-tools` on macOS)
+- `zstd` installed (`brew install zstd` on macOS)
 
 ### Step by step
 
-1. **Download boot.img** from [TheMojoMan's mega.nz](https://mega.nz/folder/CVMGEAiB#7oazR3wpkKdAH2eZChtRTg) (file: `boot_6.14.11-nabu-tmm_linux.img`) and place it at `output/boot.img`.
+1. **Put the tablet in fastboot mode**: hold **Vol Down + Power** until the fastboot screen appears.
 
-2. **Put the tablet in fastboot mode**: hold **Vol Down + Power** until the fastboot screen appears.
-
-3. **Run the flash script**:
+2. **Run the flash script**:
    ```bash
    bash release/flash.sh
    ```
 
-4. The script will:
-   - Erase `dtbo_b` and flash `vbmeta_disabled.img` to `vbmeta_b`
-   - Flash the CachyOS kernel boot.img to `boot_b`
-   - Boot into TWRP recovery
-   - Back up the partition table to `output/gpt-backup.bin`
-   - Repartition: delete `userdata`, create 1 GB ESP (partition 31) + Linux root (partition 32, remaining space)
-   - Flash the zstd-compressed rootfs image to the `linux` partition
-   - Set active slot to B (`fastboot set_active b`) and reboot
+3. The script will:
+   - Erase `dtbo_b` and flash `vbmeta_disabled.img` to `vbmeta_b` (disables Android Verified Boot)
+   - Flash `boot.img` to `boot_b` (CachyOS kernel + DTB)
+   - Decompress and flash `linux.img.zst` to the `linux` partition (~4 minutes)
+   - Set active slot to B and reboot
 
-5. The tablet should boot into CachyOS in about 60 seconds.
+4. CachyOS boots in about 60 seconds.
 
 ### Recovery / rollback
 

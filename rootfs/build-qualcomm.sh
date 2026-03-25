@@ -5,8 +5,10 @@ set -euo pipefail
 # These are required for WiFi on Snapdragon devices running mainline Linux.
 #
 # Source repos (all from https://github.com/linux-msm):
-#   qrtr     — QRTR name service + libqrtr library
-#   rmtfs    — Remote filesystem service
+#   qrtr      — libqrtr library + qrtr-cfg/lookup tools
+#   qrtr v0.3 — qrtr-ns (name service, removed from later versions)
+#   qmic      — QMI compiler (generates C source from .qmi definitions)
+#   rmtfs     — Remote filesystem service
 #   tqftpserv — TFTP service for firmware loading
 
 ROOTFS="${1:?Usage: build-qualcomm.sh <rootfs-path>}"
@@ -17,32 +19,52 @@ echo "--- Building Qualcomm userspace from source ---"
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
 
-# 1. Build qrtr (libqrtr + qrtr-ns) — no external deps
-echo "  [1/3] Building qrtr..."
+# 1. Build qrtr latest (libqrtr + tools) via meson
+# Install to host so rmtfs/tqftpserv can link, and to rootfs for runtime
+echo "  [1/5] Building qrtr (libqrtr)..."
 cd "${BUILD_DIR}"
 git clone --depth 1 https://github.com/linux-msm/qrtr.git
 cd qrtr
 meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
+meson install -C builddir
 DESTDIR="${ROOTFS}" meson install -C builddir
+ldconfig
 
-# 2. Build rmtfs — depends on libqrtr + libudev
-echo "  [2/3] Building rmtfs..."
+# 2. Build qrtr-ns from v0.3 (last version that includes it)
+# qrtr-ns was removed from later qrtr versions but the kernel still
+# requires a userspace name service daemon (see net/qrtr/Kconfig)
+echo "  [2/5] Building qrtr-ns from v0.3..."
+cd "${BUILD_DIR}"
+git clone --depth 1 --branch v0.3 https://github.com/linux-msm/qrtr.git qrtr-old
+cd qrtr-old
+# Build only qrtr-ns, linking against the v1.2 libqrtr we just installed.
+# The ns binary only uses the stable socket API, not the QMI structs.
+make prefix=/usr qrtr-ns
+install -Dm755 qrtr-ns "${ROOTFS}/usr/bin/qrtr-ns"
+
+# 3. Build qmic (QMI compiler) — needed to generate rmtfs/tqftpserv sources
+echo "  [3/5] Building qmic..."
+cd "${BUILD_DIR}"
+git clone --depth 1 https://github.com/linux-msm/qmic.git
+cd qmic
+make prefix=/usr
+make prefix=/usr install
+
+# 4. Build rmtfs — depends on libqrtr + libudev + qmic
+echo "  [4/5] Building rmtfs..."
 cd "${BUILD_DIR}"
 git clone --depth 1 https://github.com/linux-msm/rmtfs.git
 cd rmtfs
-# rmtfs uses plain make; needs pkg-config to find qrtr from the rootfs
-export PKG_CONFIG_PATH="${ROOTFS}/usr/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 make prefix=/usr
-make prefix=/usr DESTDIR="${ROOTFS}" install
+install -Dm755 rmtfs "${ROOTFS}/usr/bin/rmtfs"
 
-# 3. Build tqftpserv — depends on libqrtr + libzstd
-echo "  [3/3] Building tqftpserv..."
+# 5. Build tqftpserv — depends on libqrtr + libzstd
+echo "  [5/5] Building tqftpserv..."
 cd "${BUILD_DIR}"
 git clone --depth 1 https://github.com/linux-msm/tqftpserv.git
 cd tqftpserv
-meson setup builddir --prefix=/usr --buildtype=release \
-    --pkg-config-path="${ROOTFS}/usr/lib/pkgconfig"
+meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
 DESTDIR="${ROOTFS}" meson install -C builddir
 

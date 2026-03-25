@@ -33,10 +33,10 @@ mkdir -p "${KERNEL_CACHE}"
 # don't repeat on every retry. Each stage checks if its output exists.
 # Ubuntu nabu image (source for Qualcomm userspace binaries: rmtfs, tqftpserv, qrtr-ns)
 UBUNTU_IMG="${SCRIPT_DIR}/../nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img"
-UBUNTU_MOUNT_ARGS=""
+UBUNTU_MOUNT_ARGS=()
 if [ -f "${UBUNTU_IMG}" ]; then
     echo "  Found Ubuntu nabu image, will mount for Qualcomm binaries."
-    UBUNTU_MOUNT_ARGS="-v ${UBUNTU_IMG}:/mnt/ubuntu-nabu.img:ro"
+    UBUNTU_MOUNT_ARGS=(-v "${UBUNTU_IMG}:/mnt/ubuntu-nabu.img:ro")
 else
     echo "  WARNING: Ubuntu nabu image not found at ${UBUNTU_IMG}"
     echo "  Qualcomm userspace binaries (rmtfs, tqftpserv, qrtr-ns) will NOT be available."
@@ -47,7 +47,7 @@ echo "[3/7] Starting build inside Docker container..."
 docker run --rm --privileged \
     -v "${SCRIPT_DIR}:/build" \
     -v "${KERNEL_CACHE}:/tmp/kernel-build" \
-    ${UBUNTU_MOUNT_ARGS} \
+    "${UBUNTU_MOUNT_ARGS[@]}" \
     -e KERNEL_VERSION="${KERNEL_VERSION}" \
     -e WIFI_SSID="${WIFI_SSID}" \
     -e WIFI_PASSWORD="${WIFI_PASSWORD}" \

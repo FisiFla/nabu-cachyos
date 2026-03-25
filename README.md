@@ -8,7 +8,7 @@ A Docker-based build system that produces a flashable CachyOS-flavored Arch Linu
 - **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.14.11`) with CachyOS patches: **BORE scheduler**, **ADIOS I/O scheduler**, 1000Hz timer, full preemption
 - **GNOME Shell** desktop on Wayland with **working on-screen keyboard** for touch input
 - **CachyOS GNOME settings** (dark theme, CachyOS wallpapers, dconf tuning)
-- **11 CachyOS packages**: `cachyos-gnome-settings`, `cachyos-wallpapers`, `cachyos-themes-sddm`, `cachyos-nord-kde`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, `cachyos-packageinstaller`
+- **9 CachyOS packages**: `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, `cachyos-packageinstaller`
 - **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
 - **Mesa rebuilt** with `-O3` ARMv8.2-A optimizations for Adreno 640
 - **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)

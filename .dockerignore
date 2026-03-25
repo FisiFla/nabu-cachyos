@@ -5,6 +5,4 @@ docs/
 .cache/
 *.img
 *.img.zst
-kernel/patches/
-rootfs/overlay/
 firebase-debug.log

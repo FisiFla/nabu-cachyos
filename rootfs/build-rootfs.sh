@@ -310,7 +310,7 @@ After=qrtr-ns.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/rmtfs -o /boot/efi -P -r
+ExecStart=/usr/bin/rmtfs -r -P -s
 Restart=always
 
 [Install]

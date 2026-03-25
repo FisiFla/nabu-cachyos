@@ -8,6 +8,7 @@ output/
 output.old/
 
 # AI assistant artifacts
+CLAUDE.md
 AGENTS.md
 CONTEXT.md
 docs/superpowers/

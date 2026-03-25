@@ -34,7 +34,8 @@ else
     sed -i '/^\[options\]/a DisableSandbox' "${ROOTFS}/etc/pacman.conf"
     # Cache for next run
     echo "Caching pacstrap rootfs for future builds..."
-    tar cf "${PACSTRAP_CACHE}" -C "${ROOTFS}" .
+    mkdir -p "$(dirname "${PACSTRAP_CACHE}")"
+    tar cf "${PACSTRAP_CACHE}" -C "${ROOTFS}" . || echo "WARNING: cache tar failed (non-fatal)"
 fi
 
 # 2. Install kernel to /boot/efi/ (the ESP mount point)

@@ -24,9 +24,9 @@ fi
 echo "[2/7] Building Docker image..."
 docker build -t nabu-cachyos-builder "${SCRIPT_DIR}"
 
-# Persistent cache for kernel build (survives container restarts)
-KERNEL_CACHE="${SCRIPT_DIR}/.cache/kernel-build"
-mkdir -p "${KERNEL_CACHE}"
+# NOTE: Kernel build happens inside the container's /tmp (case-sensitive filesystem).
+# Do NOT mount a macOS volume for kernel cache — macOS is case-insensitive which
+# breaks the Linux kernel build (xt_TCPMSS.c vs xt_tcpmss.c conflict).
 
 # Step 3: Run build inside Docker
 # Mount a persistent cache volume for the kernel so git clone + compile
@@ -57,7 +57,6 @@ fi
 echo "[3/7] Starting build inside Docker container..."
 docker run --rm --privileged \
     -v "${SCRIPT_DIR}:/build" \
-    -v "${KERNEL_CACHE}:/tmp/kernel-build" \
     ${UBUNTU_MOUNT_ARGS[@]+"${UBUNTU_MOUNT_ARGS[@]}"} \
     -e KERNEL_VERSION="${KERNEL_VERSION}" \
     -e WIFI_SSID="${WIFI_SSID}" \

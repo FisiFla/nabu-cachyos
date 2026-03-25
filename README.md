@@ -56,7 +56,6 @@ This repo also contains a Docker-based build system to produce the image from sc
 | Xiaomi Pad 5 | Bootloader must be unlocked |
 | USB-C cable | Direct connection between build machine and tablet |
 | fastboot / adb | `brew install android-platform-tools` on macOS |
-| Ubuntu nabu image | TheMojoMan's Ubuntu 25.04 image (source for Qualcomm userspace binaries). Place at `../nabu/Ubuntu 25.04 (Plucky Puffin)/ubuntu-25.04.img` relative to this repo |
 | TheMojoMan boot.img | Download `boot_6.14.11-nabu-tmm_linux.img` from [TheMojoMan's mega.nz](https://mega.nz/folder/CVMGEAiB#7oazR3wpkKdAH2eZChtRTg) and place at `output/boot.img`. Used as fallback; the build also produces a CachyOS kernel boot.img |
 | vbmeta_disabled.img | Download from same mega.nz folder. Required to disable Android Verified Boot |
 
@@ -71,7 +70,7 @@ export WIFI_PASSWORD="YourPassword"
 ./build.sh
 
 # 3. Flash (tablet must be in fastboot mode: hold Vol Down + Power)
-bash image/flash.sh
+bash release/flash.sh
 ```
 
 ## Build Process
@@ -114,7 +113,7 @@ The flash process uses TWRP recovery to repartition and write images via ADB.
 
 3. **Run the flash script**:
    ```bash
-   bash image/flash.sh
+   bash release/flash.sh
    ```
 
 4. The script will:
@@ -140,13 +139,15 @@ If the tablet does not boot:
 
 | Account | Password | Notes |
 |---|---|---|
-| `nabu` | `cachyos` | Regular user, passwordless sudo, member of wheel/video/audio/input |
-| `root` | `cachyos` | SSH root login enabled via `PermitRootLogin yes` |
+| `nabu` | `cachyos` | Regular user, sudo with password, member of wheel/video/audio/input |
+| `root` | `cachyos` | SSH root login via key only (`prohibit-password`) |
+
+**Change passwords after first login:** `passwd && sudo passwd root`
 
 SSH is enabled by default. Connect after boot:
 ```bash
-ssh root@nabu-cachyos.local    # via mDNS (recommended)
-ssh root@<tablet-ip>            # via IP address
+ssh nabu@nabu-cachyos.local    # via mDNS (recommended)
+ssh nabu@<tablet-ip>            # via IP address
 ```
 
 ## Known Limitations
@@ -229,7 +230,7 @@ WiFi on nabu requires three Qualcomm daemons that are not available in Arch repo
 - `rmtfs` -- remote filesystem service
 - `tqftpserv` -- TFTP service for firmware loading
 
-These binaries (plus `libqrtr`) are extracted from TheMojoMan's Ubuntu 25.04 nabu image and installed into the rootfs. All three run as systemd services.
+These are built from source during the rootfs build stage from their upstream [linux-msm](https://github.com/linux-msm) repositories (all BSD-3-Clause licensed). All three run as systemd services.
 
 ### CachyOS system tuning
 
@@ -282,8 +283,9 @@ nabu-cachyos/
 │           └── bin/            # Helper scripts (snapshot, rollback, kernel-update, install-containers)
 ├── image/
 │   ├── build-image.sh          # Creates ESP and rootfs images
-│   ├── flash.sh                # Flashes images to tablet via fastboot/adb
 │   └── grub.cfg.template       # GRUB config template (unused in direct boot)
+├── release/
+│   └── flash.sh                # Flashes images to tablet via fastboot
 ├── recovery/
 │   └── fetch-recovery.sh       # Downloads TWRP recovery image
 └── output/                     # Build artifacts (boot.img, esp.img, linux.img.zst)
@@ -293,7 +295,8 @@ nabu-cachyos/
 
 This project would not be possible without the work of these projects and people:
 
-- **[TheMojoMan](https://github.com/TheMojoMan/xiaomi-nabu)** -- Boot.img and UEFI firmware for nabu. The Ubuntu 25.04 nabu image is the source for Qualcomm userspace binaries (rmtfs, tqftpserv, qrtr-ns) that are not available in Arch repos.
+- **[TheMojoMan](https://github.com/TheMojoMan/xiaomi-nabu)** -- Boot.img and UEFI firmware for nabu.
+- **[linux-msm](https://github.com/linux-msm)** -- Qualcomm userspace daemons (qrtr, rmtfs, tqftpserv) built from source for WiFi support.
 - **[sm8150-mainline](https://gitlab.com/sm8150-mainline/linux)** -- Mainline Linux kernel with Snapdragon 855 (sm8150) support, the foundation for nabu Linux support.
 - **[CachyOS](https://cachyos.org/)** -- Kernel patches (BORE, BBR3, ADIOS), theming packages, system tuning configs, and PKGBUILD recipes via [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS).
 - **[map220v](https://github.com/map220v/nabu-firmware)** -- Nabu-specific firmware blobs (WiFi WCN3991, Adreno 640 GPU, Bluetooth, audio codec) required for hardware functionality.
@@ -303,4 +306,4 @@ This project would not be possible without the work of these projects and people
 
 ## License
 
-The build scripts in this repository are provided as-is. The components they download, build, and assemble are subject to their own respective licenses (GPL for the kernel, various licenses for CachyOS packages, etc.).
+This project is licensed under the [GPL-2.0](LICENSE), matching the Linux kernel. The components downloaded and assembled during the build are subject to their own respective licenses (GPL for the kernel, BSD-3 for Qualcomm userspace tools, various licenses for CachyOS packages, etc.).

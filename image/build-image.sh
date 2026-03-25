@@ -91,7 +91,13 @@ rm "${LINUX_IMG}"
 
 echo "  Rootfs image: ${OUTPUT}/linux.img.zst ($(du -h "${OUTPUT}/linux.img.zst" | cut -f1))"
 
+# 4. Generate SHA256 checksums
+echo "Generating checksums..."
+cd "${OUTPUT}"
+sha256sum *.img *.zst 2>/dev/null > SHA256SUMS || true
+cat SHA256SUMS
+
 echo ""
 echo "--- Image build complete ---"
 echo "Artifacts:"
-ls -lh "${OUTPUT}/"*.img "${OUTPUT}/"*.zst 2>/dev/null || true
+ls -lh "${OUTPUT}/"*.img "${OUTPUT}/"*.zst "${OUTPUT}/SHA256SUMS" 2>/dev/null || true

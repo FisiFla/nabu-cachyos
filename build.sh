@@ -35,13 +35,7 @@ if ! docker info &>/dev/null; then
     exit 1
 fi
 
-# Qualcomm WiFi binaries (bundled in repo)
-if [ ! -f "${SCRIPT_DIR}/rootfs/qualcomm-binaries/rmtfs" ]; then
-    echo "ERROR: Qualcomm WiFi binaries not found at rootfs/qualcomm-binaries/"
-    echo "  These should be in the repo. Try: git checkout rootfs/qualcomm-binaries/"
-    exit 1
-fi
-echo "  Qualcomm binaries: bundled in repo"
+echo "  Qualcomm WiFi daemons: built from source during rootfs stage"
 
 # ─── Step 1: Download ALARM rootfs tarball ──────────────────────────
 
@@ -123,4 +117,4 @@ echo ""
 echo "  2. Download vbmeta_disabled.img from same folder -> output/"
 echo ""
 echo "  3. Put tablet in fastboot (Vol Down + Power) and run:"
-echo "     bash image/flash.sh"
+echo "     bash release/flash.sh"

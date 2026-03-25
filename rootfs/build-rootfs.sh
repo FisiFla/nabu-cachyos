@@ -198,8 +198,8 @@ echo "nabu:cachyos" | arch-chroot "${ROOTFS}" chpasswd
 echo "root:cachyos" | arch-chroot "${ROOTFS}" chpasswd
 # NOTE: Do NOT use chage -d 0 (password expiry breaks GDM auto-login)
 
-# Passwordless sudo for wheel group
-echo "%wheel ALL=(ALL:ALL) NOPASSWD: ALL" > "${ROOTFS}/etc/sudoers.d/wheel"
+# Sudo for wheel group (password required)
+echo "%wheel ALL=(ALL:ALL) ALL" > "${ROOTFS}/etc/sudoers.d/wheel"
 chmod 440 "${ROOTFS}/etc/sudoers.d/wheel"
 
 # Copy skel dotfiles to user home (packages install to /etc/skel/)
@@ -266,24 +266,10 @@ PrivateDevices=no
 RestrictNamespaces=no
 NMSDEOF
 
-# 10c. Install Qualcomm userspace services (qrtr-ns, rmtfs, tqftpserv)
-# These binaries are bundled in the repo (extracted from TheMojoMan's Ubuntu image)
-echo "Installing Qualcomm userspace services..."
-QCOM_DIR="${SCRIPT_DIR}/qualcomm-binaries"
-if [ -d "${QCOM_DIR}" ]; then
-    for bin in rmtfs tqftpserv qrtr-ns; do
-        install -Dm755 "${QCOM_DIR}/${bin}" "${ROOTFS}/usr/bin/${bin}"
-        echo "  Installed ${bin}"
-    done
-    cp -a "${QCOM_DIR}"/libqrtr* "${ROOTFS}/usr/lib/" 2>/dev/null
-    # Create proper symlink for libqrtr.so.1
-    cd "${ROOTFS}/usr/lib" && ln -sf libqrtr.so.1.1 libqrtr.so.1 2>/dev/null || true
-    cd /build
-    echo "  Qualcomm binaries installed from repo"
-else
-    echo "  ERROR: ${QCOM_DIR} not found! WiFi will NOT work."
-    echo "  Run: extract Qualcomm binaries from Ubuntu nabu image"
-fi
+# 10c. Build and install Qualcomm userspace services from source (BSD-3-Clause)
+# qrtr-ns, rmtfs, tqftpserv — required for WiFi on Snapdragon mainline Linux
+echo "Building Qualcomm userspace services from source..."
+bash "${SCRIPT_DIR}/build-qualcomm.sh" "${ROOTFS}"
 
 # Create systemd services for Qualcomm daemons (WITHOUT sandboxing)
 cat > "${ROOTFS}/usr/lib/systemd/system/qrtr-ns.service" << 'QRTREOF'
@@ -344,10 +330,13 @@ ln -sf /dev/null "${ROOTFS}/etc/systemd/system/efi.mount"
 echo "Creating GPU firmware symlink..."
 ln -sf qcom/a630_sqe.fw "${ROOTFS}/usr/lib/firmware/a630_sqe.fw"
 
-# 10f. SSH root login
-echo "Enabling SSH root login..."
+# 10f. SSH config (key-based root login only, password login for nabu user)
+echo "Configuring SSH..."
 mkdir -p "${ROOTFS}/etc/ssh/sshd_config.d"
-echo "PermitRootLogin yes" > "${ROOTFS}/etc/ssh/sshd_config.d/root.conf"
+cat > "${ROOTFS}/etc/ssh/sshd_config.d/nabu.conf" << 'SSHEOF'
+PermitRootLogin prohibit-password
+PasswordAuthentication yes
+SSHEOF
 
 # --- End live-debugging fixes ---
 

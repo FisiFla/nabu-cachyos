@@ -9,7 +9,7 @@ Download the [latest release](https://github.com/FisiFla/nabu-cachyos/releases/l
 1. Download **all files** from the release into one folder
 2. Boot tablet into fastboot: **Vol Down + Power**
 3. Run: `bash join-and-flash.sh`
-4. Done — CachyOS boots in ~60 seconds!
+4. CachyOS boots in ~60 seconds — connect to WiFi via the GNOME touch UI
 
 Requirements: unlocked bootloader, USB-C cable, `fastboot` and `zstd` installed.
 
@@ -38,7 +38,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **USB serial gadget** for debugging via USB-C cable
 - **Direct boot** via Android boot.img format (CachyOS kernel + DTB, no GRUB)
 - WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
-- Headless first boot: auto-connects to WiFi, auto-login via GDM, SSH enabled
+- Auto-login via GDM, connect to WiFi via GNOME Settings (touch-friendly)
 
 ## What This Is NOT
 
@@ -62,15 +62,16 @@ This repo also contains a Docker-based build system to produce the image from sc
 ## Quick Start
 
 ```bash
-# 1. Set WiFi credentials (required for headless first boot)
-export WIFI_SSID="YourNetwork"
-export WIFI_PASSWORD="YourPassword"
-
-# 2. Build everything
+# 1. Build everything
 ./build.sh
 
-# 3. Flash (tablet must be in fastboot mode: hold Vol Down + Power)
+# 2. Flash (tablet must be in fastboot mode: hold Vol Down + Power)
 bash release/flash.sh
+```
+
+**Optional:** Pre-configure WiFi for headless/SSH access:
+```bash
+WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
 ```
 
 ## Build Process

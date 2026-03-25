@@ -10,16 +10,14 @@ echo ""
 
 # ─── Prerequisite checks ───────────────────────────────────────────
 
-# WiFi credentials
-if [ -z "${WIFI_SSID:-}" ] || [ -z "${WIFI_PASSWORD:-}" ]; then
-    echo "ERROR: WiFi credentials required for headless first boot."
-    echo ""
-    echo "Usage:"
-    echo "  WIFI_SSID=\"YourNetwork\" WIFI_PASSWORD=\"YourPassword\" ./build.sh"
-    echo ""
-    exit 1
+# WiFi credentials (optional — if not set, user connects via GNOME Settings)
+if [ -n "${WIFI_SSID:-}" ] && [ -n "${WIFI_PASSWORD:-}" ]; then
+    echo "  WiFi: ${WIFI_SSID} (will be pre-configured)"
+    export WIFI_SSID WIFI_PASSWORD
+else
+    echo "  WiFi: not pre-configured (connect via GNOME Settings after boot)"
+    export WIFI_SSID="" WIFI_PASSWORD=""
 fi
-export WIFI_SSID WIFI_PASSWORD
 
 # Docker
 if ! command -v docker &>/dev/null; then

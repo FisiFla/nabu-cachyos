@@ -2,8 +2,8 @@
 set -euo pipefail
 
 KERNEL_VERSION="${KERNEL_VERSION:?KERNEL_VERSION not set}"
-WIFI_SSID="${WIFI_SSID:?WIFI_SSID not set}"
-WIFI_PASSWORD="${WIFI_PASSWORD:?WIFI_PASSWORD not set}"
+WIFI_SSID="${WIFI_SSID:-}"
+WIFI_PASSWORD="${WIFI_PASSWORD:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Build rootfs in container-local filesystem (not bind mount) to avoid
@@ -66,9 +66,10 @@ cp -a "${FIRMWARE_DIR}"/* "${ROOTFS}/usr/lib/firmware/" 2>/dev/null || true
 echo "Applying overlay configs..."
 cp -a "${SCRIPT_DIR}/overlay/"* "${ROOTFS}/"
 
-# 5. Write WiFi connection file directly (avoids sed fragility with special chars)
-echo "Configuring WiFi..."
-cat > "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection" << NMEOF
+# 5. Write WiFi connection file (only if credentials provided)
+if [ -n "${WIFI_SSID}" ] && [ -n "${WIFI_PASSWORD}" ]; then
+    echo "Configuring WiFi (${WIFI_SSID})..."
+    cat > "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection" << NMEOF
 [connection]
 id=Home WiFi
 type=wifi
@@ -87,7 +88,10 @@ method=auto
 [ipv6]
 method=auto
 NMEOF
-chmod 600 "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection"
+    chmod 600 "${ROOTFS}/etc/NetworkManager/system-connections/wifi.nmconnection"
+else
+    echo "No WiFi credentials provided — user will connect via GNOME Settings."
+fi
 
 # 6. Install mkinitcpio preset (use sed instead of envsubst for portability)
 echo "Configuring mkinitcpio..."
@@ -351,7 +355,8 @@ arch-chroot "${ROOTFS}" mkinitcpio -p nabu-cachyos || {
 cat > "${ROOTFS}/etc/fstab" << 'FSTAB'
 # CachyOS Nabu fstab
 PARTLABEL=linux  /           ext4   rw,noatime,discard  0 1
-PARTLABEL=esp    /boot/efi   vfat   defaults             0 2
+# ESP commented out: FAT32 sector size incompatible with UFS, causes emergency mode
+# PARTLABEL=esp    /boot/efi   vfat   defaults             0 2
 FSTAB
 
 # 13. Leave rootfs in container-local path for build-image.sh to consume

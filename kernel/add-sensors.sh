@@ -15,18 +15,17 @@ if grep -q "lsm6dso" "$DTS"; then
     exit 0
 fi
 
-# CRITICAL: Remove gpio-reserved-ranges that blocks GPIO 126-129
-# The mainline DTS reserves these for ADSP/secure world, but we need
-# GPIO 126-127 for the sensor I2C bus (QUP SE2). Without this fix,
-# the pinctrl driver returns -EINVAL when the I2C driver tries to
-# request these pins, and the bus fails to initialize.
-echo "Removing gpio-reserved-ranges (unreserving GPIO 126-129 for sensor I2C)..."
-for f in "$DTS" arch/arm64/boot/dts/qcom/sm8150.dtsi; do
-    if [ -f "$f" ] && grep -q "gpio-reserved-ranges" "$f"; then
-        sed -i '/gpio-reserved-ranges/d' "$f"
-        echo "  Removed from $f"
-    fi
-done
+# CRITICAL: Shrink gpio-reserved-ranges to free GPIO 126-127 for sensor I2C
+# Original: <126 4> reserves GPIO 126-129
+# Fixed:    <128 2> reserves only GPIO 128-129 (freeing 126-127 for QUP SE2)
+# WARNING: Do NOT delete the line entirely — that breaks TrustZone boot!
+echo "Fixing gpio-reserved-ranges (freeing GPIO 126-127 for sensor I2C)..."
+if grep -q "gpio-reserved-ranges" "$DTS"; then
+    sed -i 's/gpio-reserved-ranges = <126 4>/gpio-reserved-ranges = <128 2>/' "$DTS"
+    sed -i 's/gpio-reserved-ranges = <0 4>, <126 4>/gpio-reserved-ranges = <0 4>, <128 2>/' "$DTS"
+    echo "  Fixed in $DTS"
+    grep "gpio-reserved-ranges" "$DTS"
+fi
 
 # Find the correct I2C label for 0x888000
 # In mainline sm8150.dtsi it could be i2c2, i2c@888000, etc.

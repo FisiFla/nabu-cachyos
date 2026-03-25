@@ -9,12 +9,10 @@ OUTPUT="/build/output"
 
 echo "--- Building flashable images ---"
 
-# 1. Check UEFI boot.img
+# 1. Verify boot.img was created by kernel build
 if [ ! -f "${OUTPUT}/boot.img" ]; then
-    echo "WARNING: boot.img (UEFI firmware) must be downloaded manually."
-    echo "Place it at: ${OUTPUT}/boot.img"
-    echo "URL: https://mega.nz/folder/CVMGEAiB#7oazR3wpkKdAH2eZChtRTg"
-    echo "File: boot_6.14.11-nabu-tmm_linux.img"
+    echo "ERROR: boot.img not found. Kernel build should have created it."
+    exit 1
 fi
 
 # 2. Build ESP image (1GB FAT32 — UEFI firmware expects this size)
@@ -86,7 +84,7 @@ umount "${LINUX_MNT}"
 
 # Compress with zstd
 echo "  Compressing rootfs image..."
-zstd -T0 -9 "${LINUX_IMG}" -o "${OUTPUT}/linux.img.zst"
+zstd -f -T0 -9 "${LINUX_IMG}" -o "${OUTPUT}/linux.img.zst"
 rm "${LINUX_IMG}"
 
 echo "  Rootfs image: ${OUTPUT}/linux.img.zst ($(du -h "${OUTPUT}/linux.img.zst" | cut -f1))"

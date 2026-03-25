@@ -59,8 +59,29 @@ cp /build/kernel/patches/*.patch "${ROOTFS}/opt/nabu-cachyos/patches/"
 cp /build/kernel/cachyos.config "${ROOTFS}/opt/nabu-cachyos/"
 
 # 4. Install nabu firmware blobs
+# nabu-firmware repo has flat files but the kernel expects device-specific paths
 echo "Installing firmware..."
 cp -a "${FIRMWARE_DIR}"/* "${ROOTFS}/usr/lib/firmware/" 2>/dev/null || true
+
+# Modem/DSP firmware: kernel looks for qcom/sm8150/xiaomi/nabu/<file>
+mkdir -p "${ROOTFS}/usr/lib/firmware/qcom/sm8150/xiaomi/nabu"
+for fw in modem.mbn adsp.mbn cdsp.mbn venus.mbn modemuw.jsn wlanmdsp.mbn; do
+    cp -f "${FIRMWARE_DIR}/${fw}" "${ROOTFS}/usr/lib/firmware/qcom/sm8150/xiaomi/nabu/" 2>/dev/null || true
+done
+
+# GPU firmware: kernel looks for qcom/a630_sqe.fw, qcom/a640_gmu.bin, etc.
+mkdir -p "${ROOTFS}/usr/lib/firmware/qcom"
+for fw in a630_sqe.fw a640_gmu.bin a640_zap.mbn; do
+    cp -f "${FIRMWARE_DIR}/${fw}" "${ROOTFS}/usr/lib/firmware/qcom/" 2>/dev/null || true
+done
+
+# Touch firmware: driver looks for novatek/novatek_nt36523_fw.bin
+mkdir -p "${ROOTFS}/usr/lib/firmware/novatek"
+cp -f "${FIRMWARE_DIR}/novatek_nt36523_fw.bin" "${ROOTFS}/usr/lib/firmware/novatek/" 2>/dev/null || true
+
+# Audio codec firmware: cs35l41 files need to be under cirrus/
+mkdir -p "${ROOTFS}/usr/lib/firmware/cirrus"
+cp -f "${FIRMWARE_DIR}"/*cs35l41* "${ROOTFS}/usr/lib/firmware/cirrus/" 2>/dev/null || true
 
 # 4. Copy overlay configs
 echo "Applying overlay configs..."
@@ -275,28 +296,14 @@ NMSDEOF
 echo "Building Qualcomm userspace services from source..."
 bash "${SCRIPT_DIR}/build-qualcomm.sh" "${ROOTFS}"
 
-# Create systemd services for Qualcomm daemons (WITHOUT sandboxing)
-cat > "${ROOTFS}/usr/lib/systemd/system/qrtr-ns.service" << 'QRTREOF'
-[Unit]
-Description=QRTR Name Service
-DefaultDependencies=no
-Before=basic.target
-After=local-fs.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/qrtr-ns -f 1
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-QRTREOF
+# Create systemd services for Qualcomm daemons
+# NOTE: qrtr-ns is NOT needed — kernel 6.14 has in-kernel QRTR name service.
+# Userspace qrtr-ns fails with "bind control socket: Address already in use".
 
 cat > "${ROOTFS}/usr/lib/systemd/system/rmtfs.service" << 'RMTFSEOF'
 [Unit]
 Description=Qualcomm Remote Filesystem Service
-Requires=qrtr-ns.service
-After=qrtr-ns.service
+After=local-fs.target
 
 [Service]
 Type=simple
@@ -310,8 +317,7 @@ RMTFSEOF
 cat > "${ROOTFS}/usr/lib/systemd/system/tqftpserv.service" << 'TQFTPEOF'
 [Unit]
 Description=Qualcomm TFTP Service
-Requires=qrtr-ns.service
-After=qrtr-ns.service
+After=local-fs.target
 
 [Service]
 Type=simple
@@ -322,7 +328,24 @@ Restart=always
 WantedBy=multi-user.target
 TQFTPEOF
 
-arch-chroot "${ROOTFS}" systemctl enable qrtr-ns.service
+# Modem remoteproc must start before WiFi can work
+cat > "${ROOTFS}/usr/lib/systemd/system/modem-remoteproc.service" << 'MODEMEOF'
+[Unit]
+Description=Start Qualcomm Modem Remoteproc
+DefaultDependencies=no
+Before=rmtfs.service tqftpserv.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'echo start > /sys/class/remoteproc/remoteproc0/state'
+
+[Install]
+WantedBy=multi-user.target
+MODEMEOF
+
+arch-chroot "${ROOTFS}" systemctl enable modem-remoteproc.service
 arch-chroot "${ROOTFS}" systemctl enable rmtfs.service
 arch-chroot "${ROOTFS}" systemctl enable tqftpserv.service
 

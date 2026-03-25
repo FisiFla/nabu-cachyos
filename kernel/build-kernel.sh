@@ -70,7 +70,22 @@ cp arch/arm64/boot/Image.gz "${OUTPUT_DIR}/"
 cp arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb "${OUTPUT_DIR}/"
 make ARCH=arm64 modules_install INSTALL_MOD_PATH="${OUTPUT_DIR}/modules"
 
+# Create Android boot.img (direct boot, no GRUB)
+echo "Creating boot.img..."
+cat "${OUTPUT_DIR}/Image.gz" "${OUTPUT_DIR}/sm8150-xiaomi-nabu.dtb" > "${OUTPUT_DIR}/Image.gz-dtb"
+mkbootimg \
+    --kernel "${OUTPUT_DIR}/Image.gz-dtb" \
+    --base 0x0 \
+    --kernel_offset 0x8000 \
+    --tags_offset 0x100 \
+    --pagesize 4096 \
+    --header_version 0 \
+    --cmdline "root=PARTLABEL=linux rw fw_devlink=permissive" \
+    -o /build/output/boot.img
+rm "${OUTPUT_DIR}/Image.gz-dtb"
+
 echo "--- Kernel build complete ---"
 echo "  Image: ${OUTPUT_DIR}/Image.gz"
 echo "  DTB:   ${OUTPUT_DIR}/sm8150-xiaomi-nabu.dtb"
 echo "  Modules: ${OUTPUT_DIR}/modules/"
+echo "  boot.img: /build/output/boot.img"

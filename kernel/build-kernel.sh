@@ -44,6 +44,12 @@ for patch in "${SCRIPT_DIR}/patches/"*.patch; do
     fi
 done
 
+# Apply device tree modifications (sensors, etc.)
+if [ -x "${SCRIPT_DIR}/add-sensors.sh" ]; then
+    echo "Adding sensor support to device tree..."
+    bash "${SCRIPT_DIR}/add-sensors.sh"
+fi
+
 # Build config: defconfig + sm8150 fragment + cachyos fragment
 # Note: sm8150.config is a fragment at arch/arm64/configs/sm8150.config, NOT a defconfig target.
 # We must use merge_config.sh to layer it on top of defconfig.

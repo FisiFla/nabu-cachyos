@@ -128,7 +128,8 @@ If the tablet does not boot:
 
 SSH is enabled by default. Connect after boot:
 ```bash
-ssh nabu@<tablet-ip>
+ssh root@nabu-cachyos.local    # via mDNS (recommended)
+ssh root@<tablet-ip>            # via IP address
 ```
 
 ## Known Limitations
@@ -139,7 +140,7 @@ ssh nabu@<tablet-ip>
 - **GPU firmware** -- `a630_sqe.fw` loads via fallback symlink; 3D acceleration works but may not be optimal
 - **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them
 - **dbus-broker replaced with dbus-daemon** -- the nabu kernel lacks namespace support required by dbus-broker; the build replaces it with classic dbus-daemon
-- **Auto-rotation** -- accelerometer driver not enabled in kernel; screen stays in default orientation
+- **Auto-rotation** -- the LSM6DSO accelerometer is on I2C bus QUP SE2 (GPIO 126-127), but these pins are reserved by TrustZone secure firmware (`gpio-reserved-ranges`). Modifying the reservation causes boot failure. Auto-rotation requires either modified firmware or ADSP sensor hub support
 - **Pen pressure sensitivity** -- does not work in landscape mode (known upstream issue)
 
 ### Why GNOME instead of KDE?
@@ -245,6 +246,7 @@ nabu-cachyos/
 │   └── fetch-firmware.sh       # Downloads nabu firmware blobs
 ├── kernel/
 │   ├── build-kernel.sh         # Clones, patches, and compiles the kernel
+│   ├── add-sensors.sh          # Adds LSM6DSO accelerometer to device tree (blocked by TrustZone)
 │   ├── cachyos.config          # CachyOS kernel config fragment
 │   └── patches/                # CachyOS kernel patches (BORE, BBR3, ADIOS, cachy-arm)
 ├── rootfs/

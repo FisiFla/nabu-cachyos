@@ -48,10 +48,9 @@ build_and_install() {
 }
 
 # All packages from CachyOS-PKGBUILDS repo
-build_and_install "cachyos-kde-settings"
+# NOTE: using cachyos-gnome-settings (not kde-settings) for GNOME desktop
+build_and_install "cachyos-gnome-settings"
 build_and_install "cachyos-wallpapers"
-build_and_install "cachyos-themes-sddm"
-build_and_install "cachyos-nord-kde"
 build_and_install "char-white"
 build_and_install "cachyos-plymouth-bootanimation"
 build_and_install "cachyos-fish-config"

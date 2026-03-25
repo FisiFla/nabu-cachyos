@@ -64,3 +64,5 @@ fzf
 pkgfile
 zsh-syntax-highlighting
 zsh-autosuggestions
+avahi
+nss-mdns

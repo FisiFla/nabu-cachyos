@@ -85,7 +85,7 @@ bash release/flash.sh
 | 4/7 | `kernel/build-kernel.sh` | Clones sm8150-mainline kernel, applies CachyOS patches, compiles `Image.gz` + DTB + modules |
 | 5/7 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
 | 6/7 | `image/build-image.sh` | Creates ESP image and ext4 rootfs image (zstd-compressed) |
-| 7/7 | `recovery/fetch-recovery.sh` | Downloads TWRP recovery image for flashing |
+| 7/7 | `recovery/fetch-recovery.sh` | Downloads recovery image (optional, not used by default flash flow) |
 
 **Caching:** The kernel build directory (`.cache/kernel-build/`) and pacstrap rootfs (`.cache/pacstrap-rootfs.tar`) persist between builds. Delete `.cache/` to force a full rebuild.
 
@@ -280,7 +280,7 @@ nabu-cachyos/
 ├── release/
 │   └── flash.sh                # Flashes images to tablet via fastboot
 ├── recovery/
-│   └── fetch-recovery.sh       # Downloads TWRP recovery image
+│   └── fetch-recovery.sh       # Downloads recovery image (optional)
 └── output/                     # Build artifacts (boot.img, esp.img, linux.img.zst)
 ```
 
@@ -294,7 +294,6 @@ This project would not be possible without the work of these projects and people
 - **[CachyOS](https://cachyos.org/)** -- Kernel patches (BORE, BBR3, ADIOS), theming packages, system tuning configs, and PKGBUILD recipes via [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS).
 - **[map220v](https://github.com/map220v/nabu-firmware)** -- Nabu-specific firmware blobs (WiFi WCN3991, Adreno 640 GPU, Bluetooth, audio codec) required for hardware functionality.
 - **[Arch Linux ARM](https://archlinuxarm.org/)** -- The base system and package repositories.
-- **[TWRP](https://twrp.me/)** -- Recovery image used during the flash process.
 - **[nabu Linux community](https://t.me/nabulinux)** -- Collective knowledge, testing, and documentation for running Linux on the Xiaomi Pad 5.
 
 ## License

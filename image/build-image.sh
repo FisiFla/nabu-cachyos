@@ -15,52 +15,9 @@ if [ ! -f "${OUTPUT}/boot.img" ]; then
     exit 1
 fi
 
-# 2. Build ESP image (1GB FAT32 — UEFI firmware expects this size)
-echo "Building ESP image (1GB)..."
-ESP_IMG="${OUTPUT}/esp.img"
-ESP_MNT="/tmp/esp-mount"
-
-dd if=/dev/zero of="${ESP_IMG}" bs=1M count=1024
-mkfs.fat -F32 -n ESPNABU "${ESP_IMG}"
-
-mkdir -p "${ESP_MNT}"
-mount -o loop "${ESP_IMG}" "${ESP_MNT}"
-
-# Install GRUB for arm64-efi (removable media path for UEFI discovery)
-grub-install --target=arm64-efi \
-    --efi-directory="${ESP_MNT}" \
-    --boot-directory="${ESP_MNT}" \
-    --removable --no-nvram
-
-# Generate GRUB config from template
-sed "s/KERNEL_VERSION_PLACEHOLDER/${KERNEL_VERSION}/g" \
-    "${SCRIPT_DIR}/grub.cfg.template" > "${ESP_MNT}/grub/grub.cfg"
-
-# Copy kernel, initramfs, DTB to ESP root (where GRUB config references them)
-cp "${ROOTFS}/boot/efi/vmlinuz-${KERNEL_VERSION}-cachyos-nabu" "${ESP_MNT}/"
-cp "${ROOTFS}/boot/efi/sm8150-xiaomi-nabu.dtb" "${ESP_MNT}/"
-
-# Initramfs might not exist if mkinitcpio failed — check and warn
-if [ -f "${ROOTFS}/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" ]; then
-    cp "${ROOTFS}/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" "${ESP_MNT}/"
-else
-    echo "WARNING: initramfs not found, generating minimal one..."
-    # Generate a minimal initramfs with just base hooks
-    arch-chroot "${ROOTFS}" mkinitcpio -k "${KERNEL_VERSION}-sm8150" -g "/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" || true
-    [ -f "${ROOTFS}/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" ] && \
-        cp "${ROOTFS}/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img" "${ESP_MNT}/"
-fi
-
-# Show key ESP files
-echo "  ESP key files:"
-ls -lh "${ESP_MNT}"/vmlinuz-* "${ESP_MNT}"/initramfs-* "${ESP_MNT}"/sm8150-* "${ESP_MNT}"/EFI/BOOT/* 2>/dev/null
-echo "  GRUB config:"
-cat "${ESP_MNT}/grub/grub.cfg"
-
-umount "${ESP_MNT}"
-echo "  ESP image: ${ESP_IMG} ($(du -h "${ESP_IMG}" | cut -f1))"
-
-# 3. Build ext4 rootfs image
+# 2. Build ext4 rootfs image for the fastboot-flashed linux partition.
+# The release path direct-boots the Android boot.img and does not use the
+# legacy GRUB/ESP flow anymore, so we intentionally do not build esp.img here.
 echo "Building ext4 rootfs image..."
 LINUX_IMG="${OUTPUT}/linux.img"
 LINUX_MNT="/tmp/linux-mount"
@@ -89,7 +46,7 @@ rm "${LINUX_IMG}"
 
 echo "  Rootfs image: ${OUTPUT}/linux.img.zst ($(du -h "${OUTPUT}/linux.img.zst" | cut -f1))"
 
-# 4. Generate SHA256 checksums
+# 3. Generate SHA256 checksums
 echo "Generating checksums..."
 cd "${OUTPUT}"
 sha256sum *.img *.zst 2>/dev/null > SHA256SUMS || true

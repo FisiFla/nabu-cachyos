@@ -9,9 +9,10 @@ Download the [latest release](https://github.com/FisiFla/nabu-cachyos/releases/l
 1. Download **all files** from the release into one folder
 2. Boot tablet into fastboot: **Vol Down + Power**
 3. Run: `bash join-and-flash.sh`
-4. CachyOS boots in ~60 seconds — connect to WiFi via the GNOME touch UI
+4. CachyOS boots in ~60 seconds — connect to WiFi via the GNOME touch UI or SSH in from the same machine
 
 Requirements: unlocked bootloader, USB-C cable, `fastboot` and `zstd` installed.
+Optional: Docker running locally enables automatic SSH key injection into the image during flash.
 
 ---
 
@@ -116,10 +117,30 @@ The flash process uses **fastboot only** — no recovery, no ADB, no repartition
 3. The script will:
    - Erase `dtbo_b` and flash `vbmeta_disabled.img` to `vbmeta_b` (disables Android Verified Boot)
    - Flash `boot.img` to `boot_b` (CachyOS kernel + DTB)
-   - Decompress and flash `linux.img.zst` to the `linux` partition (~4 minutes)
+   - Decompress `linux.img.zst`, optionally inject your local SSH public key, and flash the `linux` partition (~4 minutes)
    - Set active slot to B and reboot
 
 4. CachyOS boots in about 60 seconds.
+
+### Optional automatic SSH setup
+
+If Docker is available on the machine running `flash.sh`, the installer will try to inject one local public key from `~/.ssh/` into `/home/nabu/.ssh/authorized_keys` before flashing. That makes the first boot reachable with:
+
+```bash
+ssh nabu@nabu-cachyos.local
+```
+
+Override the key file:
+
+```bash
+SSH_PUBKEY_FILE=~/.ssh/id_ed25519.pub bash release/flash.sh
+```
+
+Skip key injection entirely:
+
+```bash
+SKIP_SSH_KEY_INJECTION=1 bash release/flash.sh
+```
 
 ### Recovery / rollback
 
@@ -214,17 +235,17 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 PBL (ROM) -> XBL -> ABL -> boot.img (CachyOS kernel + DTB, Android bootimg format) -> ext4 rootfs
 ```
 
-The boot.img is a direct-boot Android boot image (header v0) containing the CachyOS kernel with DTB appended. Kernel cmdline: `root=PARTLABEL=linux rw fw_devlink=permissive`. The rootfs lives on an ext4 partition (`PARTLABEL=linux`). No GRUB or UEFI involved in the actual boot.
+The boot.img is a direct-boot Android boot image (header v0) containing the CachyOS kernel with DTB appended. Kernel cmdline: `root=PARTLABEL=linux rw`. The rootfs lives on an ext4 partition (`PARTLABEL=linux`). No GRUB or UEFI involved in the actual boot.
 
 ### Qualcomm userspace
 
-WiFi on nabu requires three Qualcomm daemons that are not available in Arch repos:
+WiFi on nabu requires Qualcomm userspace that is not available in Arch repos:
 
-- `qrtr-ns` -- QRTR name service
 - `rmtfs` -- remote filesystem service
 - `tqftpserv` -- TFTP service for firmware loading
+- `libqrtr` -- QRTR userspace library used by those services
 
-These are built from source during the rootfs build stage from their upstream [linux-msm](https://github.com/linux-msm) repositories (all BSD-3-Clause licensed). All three run as systemd services.
+These are built from source during the rootfs build stage from their upstream [linux-msm](https://github.com/linux-msm) repositories (all BSD-3-Clause licensed). `qrtr-ns` is intentionally not used because kernel 6.14 provides in-kernel QRTR name service support.
 
 ### CachyOS system tuning
 

@@ -5,6 +5,8 @@ KERNEL_VERSION="${KERNEL_VERSION:?KERNEL_VERSION not set}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="/tmp/kernel-build"
 OUTPUT_DIR="/build/output/kernel"
+BOOT_CMDLINE="${BOOT_CMDLINE:-root=PARTLABEL=linux rw}"
+ENABLE_EXPERIMENTAL_SENSORS="${ENABLE_EXPERIMENTAL_SENSORS:-0}"
 
 mkdir -p "${OUTPUT_DIR}"
 
@@ -44,10 +46,14 @@ for patch in "${SCRIPT_DIR}/patches/"*.patch; do
     fi
 done
 
-# Apply device tree modifications (sensors, etc.)
-if [ -x "${SCRIPT_DIR}/add-sensors.sh" ]; then
-    echo "Adding sensor support to device tree..."
+# Apply optional device tree modifications.
+# nabu's TrustZone firmware reserves GPIO 126-127; changing that range
+# is known to cause boot failure, so keep the sensor DTS hack opt-in.
+if [ "${ENABLE_EXPERIMENTAL_SENSORS}" = "1" ] && [ -x "${SCRIPT_DIR}/add-sensors.sh" ]; then
+    echo "Adding experimental sensor support to device tree..."
     bash "${SCRIPT_DIR}/add-sensors.sh"
+else
+    echo "Skipping experimental sensor DTS modifications."
 fi
 
 # Build config: defconfig + sm8150 fragment + cachyos fragment
@@ -80,7 +86,7 @@ mkbootimg \
     --tags_offset 0x100 \
     --pagesize 4096 \
     --header_version 0 \
-    --cmdline "root=PARTLABEL=linux rw fw_devlink=permissive" \
+    --cmdline "${BOOT_CMDLINE}" \
     -o /build/output/boot.img
 rm "${OUTPUT_DIR}/Image.gz-dtb"
 

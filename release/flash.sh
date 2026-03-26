@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SSH_KEY_HELPER="${SCRIPT_DIR}/inject-ssh-key.sh"
 
 echo "=== CachyOS Nabu Flasher ==="
 echo ""
@@ -34,10 +35,18 @@ fastboot flash vbmeta_b "${SCRIPT_DIR}/vbmeta_disabled.img"
 echo "[2/5] Flashing CachyOS kernel..."
 fastboot flash boot_b "${SCRIPT_DIR}/boot.img"
 
-echo "[3/5] Decompressing rootfs..."
+echo "[3/5] Preparing rootfs..."
 if [ ! -f "${SCRIPT_DIR}/linux.img" ]; then
     command -v zstd >/dev/null || { echo "ERROR: zstd not found. Install: brew install zstd"; exit 1; }
     zstd -d "${SCRIPT_DIR}/linux.img.zst" -o "${SCRIPT_DIR}/linux.img"
+fi
+
+if [ "${SKIP_SSH_KEY_INJECTION:-0}" != "1" ] && [ -x "${SSH_KEY_HELPER}" ]; then
+    "${SSH_KEY_HELPER}" "${SCRIPT_DIR}/linux.img" "${SSH_PUBKEY_FILE:-}" || {
+        echo "ERROR: SSH key injection failed."
+        echo "Set SKIP_SSH_KEY_INJECTION=1 to flash without this step."
+        exit 1
+    }
 fi
 
 echo "[4/5] Flashing rootfs (this takes ~4 minutes)..."
@@ -54,6 +63,7 @@ echo "CachyOS will boot in ~60 seconds."
 echo ""
 echo "Default login: nabu / cachyos"
 echo "SSH: ssh nabu@nabu-cachyos.local"
+echo "Local alias (if configured): ssh nabu"
 echo ""
 echo "Change passwords after first login: passwd && sudo passwd root"
 echo ""

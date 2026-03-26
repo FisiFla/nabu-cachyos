@@ -1,8 +1,3 @@
-output/
-docs/
-.git/
-.DS_Store
-.cache/
-*.img
-*.img.zst
-firebase-debug.log
+*
+!Dockerfile
+!ArchLinuxARM-aarch64-latest.tar.gz

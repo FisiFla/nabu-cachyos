@@ -63,13 +63,13 @@ cp /build/kernel/cachyos.config "${ROOTFS}/opt/nabu-cachyos/"
 echo "Installing firmware..."
 cp -a "${FIRMWARE_DIR}"/* "${ROOTFS}/usr/lib/firmware/" 2>/dev/null || true
 
-# Modem/DSP firmware: kernel looks for qcom/sm8150/xiaomi/nabu/<file>
+# Device-specific firmware: kernel looks for qcom/sm8150/xiaomi/nabu/<file>
 mkdir -p "${ROOTFS}/usr/lib/firmware/qcom/sm8150/xiaomi/nabu"
-for fw in modem.mbn adsp.mbn cdsp.mbn venus.mbn modemuw.jsn wlanmdsp.mbn; do
+for fw in modem.mbn adsp.mbn cdsp.mbn venus.mbn modemuw.jsn wlanmdsp.mbn a640_zap.mbn; do
     cp -f "${FIRMWARE_DIR}/${fw}" "${ROOTFS}/usr/lib/firmware/qcom/sm8150/xiaomi/nabu/" 2>/dev/null || true
 done
 
-# GPU firmware: kernel looks for qcom/a630_sqe.fw, qcom/a640_gmu.bin, etc.
+# Generic GPU firmware paths used by drm/msm and Mesa
 mkdir -p "${ROOTFS}/usr/lib/firmware/qcom"
 for fw in a630_sqe.fw a640_gmu.bin a640_zap.mbn; do
     cp -f "${FIRMWARE_DIR}/${fw}" "${ROOTFS}/usr/lib/firmware/qcom/" 2>/dev/null || true
@@ -234,9 +234,61 @@ cp -rn "${ROOTFS}/etc/skel/." "${ROOTFS}/home/nabu/" 2>/dev/null || true
 chmod +x "${ROOTFS}/home/nabu/bin/"* 2>/dev/null || true
 chown -R 1000:1000 "${ROOTFS}/home/nabu/"
 
+# Enable GNOME accessibility keyboard by default for both the login screen
+# and the user session so touch-only first boot stays usable.
+mkdir -p "${ROOTFS}/etc/dconf/db/gdm.d" "${ROOTFS}/etc/dconf/db/local.d" "${ROOTFS}/etc/dconf/profile"
+cat > "${ROOTFS}/etc/dconf/db/gdm.d/00-a11y" << 'DCONFEOF'
+[org/gnome/desktop/a11y/applications]
+screen-keyboard-enabled=true
+DCONFEOF
+cp "${ROOTFS}/etc/dconf/db/gdm.d/00-a11y" "${ROOTFS}/etc/dconf/db/local.d/00-a11y"
+cat > "${ROOTFS}/etc/dconf/db/local.d/01-gnome-stability" << 'DCONFEOF'
+[org/gnome/mutter]
+experimental-features=[]
+DCONFEOF
+cp "${ROOTFS}/etc/dconf/db/local.d/01-gnome-stability" "${ROOTFS}/etc/dconf/db/gdm.d/01-gnome-stability"
+cat > "${ROOTFS}/etc/dconf/profile/user" << 'DCONFPROFEOF'
+user-db:user
+system-db:local
+DCONFPROFEOF
+cat > "${ROOTFS}/etc/dconf/profile/gdm" << 'DCONFPROFEOF'
+user-db:user
+system-db:gdm
+file-db:/usr/share/gdm/greeter-dconf-defaults
+DCONFPROFEOF
+
+# GNOME sometimes ignores the system default on the very first login, so
+# enforce it once inside the real user session and then get out of the way.
+mkdir -p "${ROOTFS}/usr/local/bin" "${ROOTFS}/etc/xdg/autostart"
+cat > "${ROOTFS}/usr/local/bin/enable-default-osk.sh" << 'OSKEOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+marker="${XDG_CONFIG_HOME:-${HOME}/.config}/.nabu-osk-initialized"
+[ -f "${marker}" ] && exit 0
+
+mkdir -p "$(dirname "${marker}")"
+
+if command -v gsettings >/dev/null 2>&1; then
+    gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled true || exit 0
+    : > "${marker}"
+fi
+OSKEOF
+chmod 755 "${ROOTFS}/usr/local/bin/enable-default-osk.sh"
+cat > "${ROOTFS}/etc/xdg/autostart/nabu-enable-osk.desktop" << 'DESKTOPEOF'
+[Desktop Entry]
+Type=Application
+Name=Enable Default On-Screen Keyboard
+Exec=/usr/local/bin/enable-default-osk.sh
+NoDisplay=true
+OnlyShowIn=GNOME;
+X-GNOME-Autostart-Delay=5
+DESKTOPEOF
+
 # 10. Enable services
 echo "Enabling services..."
 arch-chroot "${ROOTFS}" systemctl enable NetworkManager
+arch-chroot "${ROOTFS}" systemctl enable avahi-daemon
 arch-chroot "${ROOTFS}" systemctl enable sshd
 arch-chroot "${ROOTFS}" systemctl enable gdm
 arch-chroot "${ROOTFS}" systemctl enable bluetooth
@@ -247,6 +299,7 @@ arch-chroot "${ROOTFS}" systemctl enable usb-serial-gadget.service 2>/dev/null |
 # Disable heavy/unnecessary services for tablet use
 arch-chroot "${ROOTFS}" systemctl disable man-db.timer 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl mask ldconfig.service 2>/dev/null || true
+arch-chroot "${ROOTFS}" dconf update 2>/dev/null || true
 
 # --- Live-debugging fixes (discovered during first boot) ---
 

@@ -9,7 +9,7 @@ Download the [latest release](https://github.com/FisiFla/nabu-cachyos/releases/l
 1. Download **all files** from the release into one folder
 2. Boot tablet into fastboot: **Vol Down + Power**
 3. Run: `bash join-and-flash.sh`
-4. CachyOS boots in ~60 seconds — connect to WiFi via the GNOME touch UI or SSH in from the same machine
+4. CachyOS boots in ~60 seconds with GNOME touch UI and the on-screen keyboard enabled by default
 
 Requirements: unlocked bootloader, USB-C cable, `fastboot` and `zstd` installed.
 Optional: Docker running locally enables automatic SSH key injection into the image during flash.
@@ -26,9 +26,8 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.14.11`) with CachyOS patches: **BORE scheduler**, **ADIOS I/O scheduler**, 1000Hz timer, full preemption
 - **GNOME Shell** desktop on Wayland with **working on-screen keyboard** for touch input
 - **CachyOS GNOME settings** (dark theme, CachyOS wallpapers, dconf tuning)
-- **9 CachyOS packages**: `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, `cachyos-packageinstaller`
+- **CachyOS theming and tools** built from PKGBUILDs, including `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, and `cachyos-alacritty-config`
 - **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
-- **Mesa rebuilt** with `-O3` ARMv8.2-A optimizations for Adreno 640
 - **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)
 - **Alacritty** terminal with CachyOS config
 - **Audio UCM profiles** for nabu speakers and microphone
@@ -57,17 +56,19 @@ This repo also contains a Docker-based build system to produce the image from sc
 | Xiaomi Pad 5 | Bootloader must be unlocked |
 | USB-C cable | Direct connection between build machine and tablet |
 | fastboot / adb | `brew install android-platform-tools` on macOS |
-| TheMojoMan boot.img | Download `boot_6.14.11-nabu-tmm_linux.img` from [TheMojoMan's mega.nz](https://mega.nz/folder/CVMGEAiB#7oazR3wpkKdAH2eZChtRTg) and place at `output/boot.img`. Used as fallback; the build also produces a CachyOS kernel boot.img |
-| vbmeta_disabled.img | Download from same mega.nz folder. Required to disable Android Verified Boot |
+| vbmeta_disabled.img | Required to disable Android Verified Boot. The repo does not fetch it automatically; copy it into `output/` or point `release/create-release.sh` at it with `VBMETA_SOURCE=...` |
 
 ## Quick Start
 
 ```bash
-# 1. Build everything
+# 1. Build boot.img + linux.img.zst
 ./build.sh
 
-# 2. Flash (tablet must be in fastboot mode: hold Vol Down + Power)
-bash release/flash.sh
+# 2. Package a local release bundle
+VBMETA_SOURCE=/path/to/vbmeta_disabled.img bash release/create-release.sh
+
+# 3. Flash (tablet must be in fastboot mode: hold Vol Down + Power)
+bash release/dist/join-and-flash.sh
 ```
 
 **Optional:** Pre-configure WiFi for headless/SSH access:
@@ -86,10 +87,10 @@ WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
 | 3/7 | `firmware/fetch-firmware.sh` | Clones [nabu firmware blobs](https://github.com/map220v/nabu-firmware) (WiFi, GPU, BT, audio) |
 | 4/7 | `kernel/build-kernel.sh` | Clones sm8150-mainline kernel, applies CachyOS patches, compiles `Image.gz` + DTB + modules |
 | 5/7 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
-| 6/7 | `image/build-image.sh` | Creates ESP image and ext4 rootfs image (zstd-compressed) |
+| 6/7 | `image/build-image.sh` | Creates the fastboot-flashed ext4 rootfs image (`linux.img.zst`) and checksums |
 | 7/7 | `recovery/fetch-recovery.sh` | Downloads recovery image (optional, not used by default flash flow) |
 
-**Caching:** The kernel build directory (`.cache/kernel-build/`) and pacstrap rootfs (`.cache/pacstrap-rootfs.tar`) persist between builds. Delete `.cache/` to force a full rebuild.
+**Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`) and built kernel artifacts under `output/kernel/` persist between builds. Delete `.cache/` and/or `output/kernel/` to force a full rebuild.
 
 **CachyOS theming** is built from [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS) and includes: `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white` cursor theme, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`.
 
@@ -99,9 +100,18 @@ WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
 
 The flash process uses **fastboot only** — no recovery, no ADB, no repartitioning. It writes directly to slot B, preserving Android on slot A as a fallback.
 
+If you built from source, create a release bundle first:
+
+```bash
+VBMETA_SOURCE=/path/to/vbmeta_disabled.img bash release/create-release.sh
+cd release/dist
+```
+
 ### Prerequisites
 
-- `boot.img`, `linux.img.zst`, and `vbmeta_disabled.img` in the same directory as `flash.sh`
+- Either:
+  - a packaged release directory containing `join-and-flash.sh`, split `linux.img.zst.part-*`, `boot.img`, and `vbmeta_disabled.img`
+  - or an unsplit directory containing `flash.sh`, `boot.img`, `linux.img.zst`, and `vbmeta_disabled.img`
 - `fastboot` installed (`brew install android-platform-tools` on macOS)
 - `zstd` installed (`brew install zstd` on macOS)
 
@@ -109,9 +119,15 @@ The flash process uses **fastboot only** — no recovery, no ADB, no repartition
 
 1. **Put the tablet in fastboot mode**: hold **Vol Down + Power** until the fastboot screen appears.
 
-2. **Run the flash script**:
+2. **Run the installer**:
    ```bash
-   bash release/flash.sh
+   bash join-and-flash.sh
+   ```
+
+   If you already have an unsplit `linux.img.zst` next to `flash.sh`, you can run:
+
+   ```bash
+   bash flash.sh
    ```
 
 3. The script will:
@@ -170,7 +186,6 @@ ssh nabu@<tablet-ip>            # via IP address
 - **Camera** -- no mainline driver, does not work on any Linux distro for nabu
 - **Microphone** -- no mainline driver (UCM profiles are present but hardware support is incomplete)
 - **Suspend/resume** -- unreliable on sm8150 mainline
-- **GPU firmware** -- `a630_sqe.fw` loads via fallback symlink; 3D acceleration works but may not be optimal
 - **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them
 - **dbus-broker replaced with dbus-daemon** -- the nabu kernel lacks namespace support required by dbus-broker; the build replaces it with classic dbus-daemon
 - **Auto-rotation** -- the LSM6DSO accelerometer is on I2C bus QUP SE2 (GPIO 126-127), but these pins are reserved by TrustZone secure firmware (`gpio-reserved-ranges`). Modifying the reservation causes boot failure. Auto-rotation requires either modified firmware or ADSP sensor hub support
@@ -217,9 +232,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 | | Firefox (Wayland) | Installed |
 | | Vivaldi (Wayland + GPU) | Installed |
 | | btop | Installed |
-| | CachyOS Package Installer | Installed |
 | **Packages** | cachyos-settings | Installed |
-| | Mesa -O3 ARMv8.2-A | Rebuilt |
 | **Branding** | os-release, fastfetch logo | Applied |
 | **N/A** | x86 repo packages (LTO/PGO) | ARM — built from PKGBUILDS |
 | | Proton/Wine gaming | x86 only |
@@ -275,6 +288,7 @@ Applied via overlay configs in `rootfs/overlay/` and the `cachyos-settings` pack
 nabu-cachyos/
 ├── build.sh                    # Main build orchestrator
 ├── Dockerfile                  # Docker image (ALARM-based build environment)
+├── .dockerignore               # Keeps large local artifacts out of Docker build context
 ├── firmware/
 │   └── fetch-firmware.sh       # Downloads nabu firmware blobs
 ├── kernel/
@@ -297,13 +311,16 @@ nabu-cachyos/
 │           ├── .zshrc          # CachyOS zsh config
 │           └── bin/            # Helper scripts (snapshot, rollback, kernel-update, install-containers)
 ├── image/
-│   ├── build-image.sh          # Creates ESP and rootfs images
-│   └── grub.cfg.template       # GRUB config template (unused in direct boot)
+│   ├── build-image.sh          # Creates the flashable linux.img.zst rootfs image
+│   └── grub.cfg.template       # Legacy template retained from the old GRUB/ESP flow
 ├── release/
-│   └── flash.sh                # Flashes images to tablet via fastboot
+│   ├── create-release.sh       # Packages output/ into a release-ready dist/ directory
+│   ├── flash.sh                # Flashes an unsplit local image set via fastboot
+│   ├── inject-ssh-key.sh       # Optionally injects a local SSH public key into linux.img
+│   └── join-and-flash.sh       # Reassembles split rootfs parts, then runs flash.sh
 ├── recovery/
 │   └── fetch-recovery.sh       # Downloads recovery image (optional)
-└── output/                     # Build artifacts (boot.img, esp.img, linux.img.zst)
+└── output/                     # Build artifacts (boot.img, linux.img.zst, checksums, kernel/, firmware/)
 ```
 
 ## Credits and Attribution

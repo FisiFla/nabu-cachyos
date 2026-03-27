@@ -30,7 +30,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
 - **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)
 - **Alacritty** terminal with CachyOS config
-- **Audio UCM profiles** for nabu speakers and microphone
+- **Working audio** with nabu UCM profiles
 - **Dynamic CPU governor** (performance when charging, schedutil on battery)
 - **MGLRU** enabled via tmpfiles for improved memory management
 - **ADIOS I/O scheduler** set via udev rules
@@ -184,7 +184,6 @@ ssh nabu@<tablet-ip>            # via IP address
 ## Known Limitations
 
 - **Camera** -- no mainline driver, does not work on any Linux distro for nabu
-- **Microphone** -- no mainline driver (UCM profiles are present but hardware support is incomplete)
 - **Suspend/resume** -- unreliable on sm8150 mainline
 - **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them
 - **dbus-broker replaced with dbus-daemon** -- the nabu kernel lacks namespace support required by dbus-broker; the build replaces it with classic dbus-daemon

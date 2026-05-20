@@ -39,16 +39,16 @@ echo "  Qualcomm WiFi daemons: built from source during rootfs stage"
 
 ALARM_TARBALL="ArchLinuxARM-aarch64-latest.tar.gz"
 if [ ! -f "${SCRIPT_DIR}/${ALARM_TARBALL}" ]; then
-    echo "[1/7] Downloading Arch Linux ARM rootfs tarball (~1GB)..."
+    echo "[1/6] Downloading Arch Linux ARM rootfs tarball (~1GB)..."
     curl -L -# -o "${SCRIPT_DIR}/${ALARM_TARBALL}" \
         "http://os.archlinuxarm.org/os/${ALARM_TARBALL}"
 else
-    echo "[1/7] ALARM tarball present, skipping download."
+    echo "[1/6] ALARM tarball present, skipping download."
 fi
 
 # ─── Step 2: Build Docker image ────────────────────────────────────
 
-echo "[2/7] Building Docker image..."
+echo "[2/6] Building Docker image..."
 docker build -t nabu-cachyos-builder "${SCRIPT_DIR}"
 
 # ─── Step 3: Run build inside Docker ───────────────────────────────
@@ -57,7 +57,7 @@ docker build -t nabu-cachyos-builder "${SCRIPT_DIR}"
 # Do NOT mount a macOS host volume for kernel source — macOS is
 # case-insensitive which breaks Linux kernel builds.
 
-echo "[3/7] Starting build inside Docker container..."
+echo "[3/6] Starting build inside Docker container..."
 docker run --rm --privileged \
     -v "${SCRIPT_DIR}:/build" \
     -e KERNEL_VERSION="${KERNEL_VERSION}" \
@@ -70,35 +70,27 @@ docker run --rm --privileged \
 
         # Stage 1: Firmware
         if [ -d output/firmware/nabu-firmware ]; then
-            echo '[3/7] Firmware already fetched, skipping.'
+            echo '[3/6] Firmware already fetched, skipping.'
         else
-            echo '[3/7] Fetching firmware...'
+            echo '[3/6] Fetching firmware...'
             bash firmware/fetch-firmware.sh
         fi
 
         # Stage 2: Kernel
         if [ -f output/kernel/Image.gz ] && [ -f output/kernel/sm8150-xiaomi-nabu.dtb ]; then
-            echo '[4/7] Kernel already built, skipping.'
+            echo '[4/6] Kernel already built, skipping.'
         else
-            echo '[4/7] Building kernel (this takes ~20 minutes)...'
+            echo '[4/6] Building kernel (this takes ~20 minutes)...'
             bash kernel/build-kernel.sh
         fi
 
         # Stage 3: Rootfs (Qualcomm binaries are bundled in repo)
-        echo '[5/7] Building rootfs...'
+        echo '[5/6] Building rootfs...'
         bash rootfs/build-rootfs.sh
 
         # Stage 4: Images
-        echo '[6/7] Building images...'
+        echo '[6/6] Building images...'
         bash image/build-image.sh
-
-        # Stage 5: Recovery (best-effort)
-        if [ -f output/recovery.img ]; then
-            echo '[7/7] Recovery already present, skipping.'
-        else
-            echo '[7/7] Fetching recovery (optional)...'
-            bash recovery/fetch-recovery.sh || echo 'Recovery download failed (not critical).'
-        fi
     "
 
 echo ""

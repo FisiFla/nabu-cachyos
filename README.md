@@ -78,17 +78,16 @@ WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
 
 ## Build Process
 
-`build.sh` orchestrates seven stages, all running inside a Docker container built from the Arch Linux ARM rootfs tarball:
+`build.sh` orchestrates six stages, all running inside a Docker container built from the Arch Linux ARM rootfs tarball:
 
 | Stage | Script | What it does |
 |---|---|---|
-| 1/7 | `build.sh` | Downloads ALARM rootfs tarball (if not cached) |
-| 2/7 | `build.sh` | Builds Docker image from `Dockerfile` + ALARM tarball |
-| 3/7 | `firmware/fetch-firmware.sh` | Clones [nabu firmware blobs](https://github.com/map220v/nabu-firmware) (WiFi, GPU, BT, audio) |
-| 4/7 | `kernel/build-kernel.sh` | Clones sm8150-mainline kernel, applies CachyOS patches, compiles `Image.gz` + DTB + modules |
-| 5/7 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
-| 6/7 | `image/build-image.sh` | Creates the fastboot-flashed ext4 rootfs image (`linux.img.zst`) and checksums |
-| 7/7 | `recovery/fetch-recovery.sh` | Downloads recovery image (optional, not used by default flash flow) |
+| 1/6 | `build.sh` | Downloads ALARM rootfs tarball (if not cached) |
+| 2/6 | `build.sh` | Builds Docker image from `Dockerfile` + ALARM tarball |
+| 3/6 | `firmware/fetch-firmware.sh` | Clones [nabu firmware blobs](https://github.com/map220v/nabu-firmware) (WiFi, GPU, BT, audio) |
+| 4/6 | `kernel/build-kernel.sh` | Clones sm8150-mainline kernel, applies CachyOS patches, compiles `Image.gz` + DTB + modules |
+| 5/6 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
+| 6/6 | `image/build-image.sh` | Creates the fastboot-flashed ext4 rootfs image (`linux.img.zst`) and checksums |
 
 **Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`) and built kernel artifacts under `output/kernel/` persist between builds. Delete `.cache/` and/or `output/kernel/` to force a full rebuild.
 
@@ -310,15 +309,12 @@ nabu-cachyos/
 │           ├── .zshrc          # CachyOS zsh config
 │           └── bin/            # Helper scripts (snapshot, rollback, kernel-update, install-containers)
 ├── image/
-│   ├── build-image.sh          # Creates the flashable linux.img.zst rootfs image
-│   └── grub.cfg.template       # Legacy template retained from the old GRUB/ESP flow
+│   └── build-image.sh          # Creates the flashable linux.img.zst rootfs image
 ├── release/
 │   ├── create-release.sh       # Packages output/ into a release-ready dist/ directory
 │   ├── flash.sh                # Flashes an unsplit local image set via fastboot
 │   ├── inject-ssh-key.sh       # Optionally injects a local SSH public key into linux.img
 │   └── join-and-flash.sh       # Reassembles split rootfs parts, then runs flash.sh
-├── recovery/
-│   └── fetch-recovery.sh       # Downloads recovery image (optional)
 └── output/                     # Build artifacts (boot.img, linux.img.zst, checksums, kernel/, firmware/)
 ```
 

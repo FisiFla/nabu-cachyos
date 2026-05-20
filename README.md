@@ -33,6 +33,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **Alacritty** terminal with CachyOS config
 - **Working audio** with nabu UCM profiles
 - **Dynamic CPU governor** (performance when charging, schedutil on battery)
+- **`ananicy-cpp`** auto-renicer enabled at boot — keeps the UI responsive when heavy background tasks (e.g. AUR rebuilds) are running
 - **MGLRU** enabled via tmpfiles for improved memory management
 - **ADIOS I/O scheduler** set via udev rules
 - **CachyOS branding**: custom `os-release`, fastfetch logo, Plymouth boot animation

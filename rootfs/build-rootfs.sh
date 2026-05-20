@@ -299,6 +299,8 @@ arch-chroot "${ROOTFS}" systemctl enable systemd-zram-setup@zram0.service
 arch-chroot "${ROOTFS}" systemctl enable cpu-performance.service
 # USB serial gadget for debugging
 arch-chroot "${ROOTFS}" systemctl enable usb-serial-gadget.service 2>/dev/null || true
+# ananicy-cpp ships inside cachyos-settings; enable best-effort in case that install ever skips
+arch-chroot "${ROOTFS}" systemctl enable ananicy-cpp.service 2>/dev/null || true
 # Disable heavy/unnecessary services for tablet use
 arch-chroot "${ROOTFS}" systemctl disable man-db.timer 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl mask ldconfig.service 2>/dev/null || true

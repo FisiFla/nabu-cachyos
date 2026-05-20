@@ -47,6 +47,7 @@ python-pip
 nodejs
 npm
 rustup
+scx-scheds
 strace
 lsof
 iotop

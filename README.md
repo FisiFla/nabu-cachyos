@@ -209,7 +209,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 | | 1000Hz timer tick | Applied |
 | | Full preemption (PREEMPT) | Applied |
 | | BBR3 TCP | Skipped — 1 hunk in `net/ipv4/tcp_input.c` conflicts with the sm8150 tree, needs manual rebase |
-| | sched-ext | Config enabled |
+| | sched-ext | Config enabled + `scx-scheds` userspace tools shipped (start with `systemctl start scx_lavd`) |
 | **System** | CachyOS sysctl tuning | Full (via cachyos-settings) |
 | | MGLRU | Enabled |
 | | ZRAM zstd compression | Enabled |

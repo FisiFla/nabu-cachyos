@@ -29,6 +29,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **CachyOS theming and tools** built from PKGBUILDs, including `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, and `cachyos-alacritty-config`
 - **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
 - **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)
+- **`paru` AUR helper** pre-installed (`paru-bin`) so users can install AUR packages without bootstrapping `makepkg` first
 - **Alacritty** terminal with CachyOS config
 - **Working audio** with nabu UCM profiles
 - **Dynamic CPU governor** (performance when charging, schedutil on battery)

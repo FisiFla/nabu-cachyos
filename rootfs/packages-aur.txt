@@ -1,1 +1,2 @@
 vivaldi-multiarch-bin
+paru-bin

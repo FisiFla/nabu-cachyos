@@ -26,7 +26,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.14.11`) with CachyOS patches: **BORE scheduler**, **ADIOS I/O scheduler**, 1000Hz timer, full preemption
 - **GNOME Shell** desktop on Wayland with **working on-screen keyboard** for touch input
 - **CachyOS GNOME settings** (dark theme, CachyOS wallpapers, dconf tuning)
-- **CachyOS theming and tools** built from PKGBUILDs, including `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, and `cachyos-alacritty-config`
+- **CachyOS theming and tools** built from PKGBUILDs, including `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, and `cachyos-packageinstaller`
 - **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
 - **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)
 - **`paru` AUR helper** pre-installed (`paru-bin`) so users can install AUR packages without bootstrapping `makepkg` first

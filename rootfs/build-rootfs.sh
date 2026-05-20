@@ -165,7 +165,7 @@ if [ ! -d "CachyOS-PKGBUILDS" ]; then
     sudo -u builder git clone --depth 1 https://github.com/CachyOS/CachyOS-PKGBUILDS.git
 fi
 
-for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config; do
+for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config cachyos-packageinstaller; do
     echo "  Building ${tool}..."
     cd "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}"
     sudo -u builder makepkg -f --noconfirm --nodeps --skipinteg 2>&1 || {

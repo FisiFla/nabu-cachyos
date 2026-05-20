@@ -185,7 +185,7 @@ ssh nabu@<tablet-ip>            # via IP address
 
 - **Camera** -- no mainline driver, does not work on any Linux distro for nabu
 - **Suspend/resume** -- unreliable on sm8150 mainline
-- **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them
+- **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them. BBR3 specifically fails on 1 hunk in `net/ipv4/tcp_input.c` against `sm8150/6.14.11` — the rest of the patch applies cleanly. A manual rebase is the next step there.
 - **dbus-broker replaced with dbus-daemon** -- the nabu kernel lacks namespace support required by dbus-broker; the build replaces it with classic dbus-daemon
 - **Auto-rotation** -- the LSM6DSO accelerometer is on I2C bus QUP SE2 (GPIO 126-127), but these pins are reserved by TrustZone secure firmware (`gpio-reserved-ranges`). Modifying the reservation causes boot failure. Auto-rotation requires either modified firmware or ADSP sensor hub support
 - **Pen pressure sensitivity** -- does not work in landscape mode (known upstream issue)
@@ -208,7 +208,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 | | ADIOS I/O scheduler | Applied + active |
 | | 1000Hz timer tick | Applied |
 | | Full preemption (PREEMPT) | Applied |
-| | BBR3 TCP | Skipped (sm8150 conflict) |
+| | BBR3 TCP | Skipped — 1 hunk in `net/ipv4/tcp_input.c` conflicts with the sm8150 tree, needs manual rebase |
 | | sched-ext | Config enabled |
 | **System** | CachyOS sysctl tuning | Full (via cachyos-settings) |
 | | MGLRU | Enabled |

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Nabu Welcome
+Exec=/usr/local/bin/nabu-welcome
+NoDisplay=true
+OnlyShowIn=GNOME;
+X-GNOME-Autostart-Delay=8

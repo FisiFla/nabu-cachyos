@@ -43,6 +43,7 @@ pipewire-pulse
 pipewire-alsa
 wireplumber
 python
+python-gobject
 python-pip
 nodejs
 npm

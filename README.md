@@ -40,6 +40,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **Direct boot** via Android boot.img format (CachyOS kernel + DTB, no GRUB)
 - WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
 - Auto-login via GDM, connect to WiFi via GNOME Settings (touch-friendly)
+- **First-run welcome dialog** (`nabu-welcome`) — touch-friendly GTK4 app that runs once on first login with shortcuts to change the default password, install apps, and read the README
 
 ## What This Is NOT
 
@@ -236,7 +237,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 | **N/A** | x86 repo packages (LTO/PGO) | ARM — built from PKGBUILDS |
 | | Proton/Wine gaming | x86 only |
 | | systemd-boot | Direct boot instead |
-| | cachyos-hello | x86 binary |
+| | cachyos-hello | x86 binary — replaced by `nabu-welcome`, a touch-friendly GTK4 first-run dialog |
 | | Multiple kernel variants | Single sm8150 kernel |
 
 ## Technical Details

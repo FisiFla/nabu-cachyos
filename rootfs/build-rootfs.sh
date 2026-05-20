@@ -185,6 +185,11 @@ echo "Installing zsh plugins..."
 git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git "${ROOTFS}/usr/share/oh-my-zsh" 2>/dev/null || true
 git clone --depth 1 https://github.com/romkatv/powerlevel10k.git "${ROOTFS}/usr/share/zsh-theme-powerlevel10k" 2>/dev/null || true
 git clone --depth 1 https://github.com/zsh-users/zsh-history-substring-search.git "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search" 2>/dev/null || true
+# Drop bundled .git histories — these plugins are never updated on-device and
+# the pack files just bloat linux.img.zst by tens of MB per plugin.
+rm -rf "${ROOTFS}/usr/share/oh-my-zsh/.git" 2>/dev/null || true
+rm -rf "${ROOTFS}/usr/share/zsh-theme-powerlevel10k/.git" 2>/dev/null || true
+rm -rf "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search/.git" 2>/dev/null || true
 
 # Create default p10k config (skip interactive wizard — no keyboard on tablet)
 cat > "${ROOTFS}/etc/skel/.p10k.zsh" << 'P10KEOF'

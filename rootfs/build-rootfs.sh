@@ -301,6 +301,13 @@ arch-chroot "${ROOTFS}" systemctl enable gdm
 arch-chroot "${ROOTFS}" systemctl enable bluetooth
 arch-chroot "${ROOTFS}" systemctl enable systemd-zram-setup@zram0.service
 arch-chroot "${ROOTFS}" systemctl enable cpu-performance.service
+# NTP at boot — RTC on nabu is unreliable (drifts to 2063 on cold boot), and
+# every SSL cert + pacman signature check fails with a wrong clock.
+arch-chroot "${ROOTFS}" systemctl enable systemd-timesyncd.service
+# Mark current A/B slot as successfully booted (NAS-229) — without this,
+# slot-retry-count drains 7→0 across reboots and the bootloader rolls back
+# to Android. Binary comes from build-qualcomm.sh.
+arch-chroot "${ROOTFS}" systemctl enable qbootctl-mark-success.service 2>/dev/null || true
 # USB serial gadget for debugging
 arch-chroot "${ROOTFS}" systemctl enable usb-serial-gadget.service 2>/dev/null || true
 # ananicy-cpp ships inside cachyos-settings; enable best-effort in case that install ever skips

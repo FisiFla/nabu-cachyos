@@ -1,5 +1,9 @@
 base
 base-devel
+# Pacman ALARM signing keyring. Without this, /usr/share/pacman/keyrings/archlinuxarm.gpg
+# is absent and first-boot `pacman -Sy <foo>` fails with "signature from … is unknown trust".
+# Found live during NAS-229 qbootctl install.
+archlinuxarm-keyring
 linux-firmware
 mkinitcpio
 networkmanager

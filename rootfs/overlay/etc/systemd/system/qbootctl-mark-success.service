@@ -1,0 +1,20 @@
+[Unit]
+Description=Mark current A/B slot as successfully booted
+Documentation=https://github.com/linux-msm/qbootctl
+# Run only after the system reaches multi-user — if we crash before this,
+# the bootloader should keep retry counts decrementing (that's the whole
+# point of A/B retry counters).
+After=multi-user.target
+# Don't run if the binary is missing — pacstrap or build regression
+# shouldn't brick the boot.
+ConditionPathExists=/usr/bin/qbootctl
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/qbootctl -m
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

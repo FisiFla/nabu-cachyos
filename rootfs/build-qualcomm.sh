@@ -58,8 +58,21 @@ meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
 DESTDIR="${ROOTFS}" meson install -C builddir
 
+# 5. Build qbootctl — qcom A/B slot HAL port for Linux.
+# Pairs with /etc/systemd/system/qbootctl-mark-success.service (in overlay)
+# which runs `qbootctl -m` after multi-user.target to mark the active slot
+# as successfully booted. Without it, every reboot drains slot-retry-count
+# until the bootloader rolls slot B back to Android. See NAS-229.
+echo "  [5/5] Building qbootctl..."
+cd "${BUILD_DIR}"
+git clone --depth 1 https://github.com/linux-msm/qbootctl.git
+cd qbootctl
+meson setup builddir --prefix=/usr --buildtype=release
+meson compile -C builddir
+DESTDIR="${ROOTFS}" meson install -C builddir
+
 echo "--- Qualcomm userspace build complete ---"
-echo "  Installed: rmtfs, tqftpserv, libqrtr v1.2"
+echo "  Installed: rmtfs, tqftpserv, libqrtr v1.2, qbootctl"
 echo "  (qrtr-ns not needed — kernel has in-kernel QRTR name service)"
 
 # Clean up

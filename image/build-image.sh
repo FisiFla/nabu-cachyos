@@ -20,24 +20,18 @@ fi
 # legacy GRUB/ESP flow anymore, so we intentionally do not build esp.img here.
 echo "Building ext4 rootfs image..."
 LINUX_IMG="${OUTPUT}/linux.img"
-LINUX_MNT="/tmp/linux-mount"
 
 # Calculate rootfs size and add 20% headroom
 ROOTFS_SIZE_MB=$(du -sm "${ROOTFS}" | awk '{print $1}')
 IMG_SIZE_MB=$(( ROOTFS_SIZE_MB * 120 / 100 ))
 echo "  Rootfs is ${ROOTFS_SIZE_MB}MB, creating ${IMG_SIZE_MB}MB image..."
 
+# Populate the filesystem from the rootfs tree at mkfs time. Avoids needing
+# a loopback mount, which Docker containers (even --privileged) can't always
+# allocate — `mount -o loop` fails with "failed to set up loop device" on
+# hosts where /dev/loop-control isn't exposed.
 truncate -s "${IMG_SIZE_MB}M" "${LINUX_IMG}"
-mkfs.ext4 -F -L linux "${LINUX_IMG}"
-
-mkdir -p "${LINUX_MNT}"
-mount -o loop "${LINUX_IMG}" "${LINUX_MNT}"
-
-# Copy rootfs
-echo "  Copying rootfs (this takes a minute)..."
-cp -a "${ROOTFS}/"* "${LINUX_MNT}/" 2>/dev/null || true
-
-umount "${LINUX_MNT}"
+mkfs.ext4 -F -L linux -d "${ROOTFS}" "${LINUX_IMG}"
 
 # Compress with zstd
 echo "  Compressing rootfs image..."

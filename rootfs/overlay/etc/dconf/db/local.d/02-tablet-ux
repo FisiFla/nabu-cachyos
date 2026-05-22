@@ -1,0 +1,14 @@
+# Tablet UX: no auto-lock on suspend.
+#
+# The build ships nabu with no password by default (see build-rootfs.sh —
+# `passwd -d nabu` + sudoers NOPASSWD). PAM rejects empty passwords without
+# `nullok`, so a lock screen with an empty password would be un-unlockable.
+# Disable lock entirely. If a user sets a password and wants lock-on-suspend,
+# they can override these via dconf.
+
+[org/gnome/desktop/screensaver]
+lock-enabled=false
+idle-activation-enabled=false
+
+[org/gnome/desktop/session]
+idle-delay=uint32 0

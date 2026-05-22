@@ -237,12 +237,16 @@ arch-chroot "${ROOTFS}" passwd -d root
 # NOTE: Do NOT use chage -d 0 (password expiry breaks GDM auto-login)
 
 # Passwordless sudo for nabu (matches the "no password by default" stance).
-# Drop this file by editing /etc/sudoers.d/99-nabu-nopasswd if you set a
-# password and want sudo to prompt for it.
-echo 'nabu ALL=(ALL) NOPASSWD: ALL' > "${ROOTFS}/etc/sudoers.d/99-nabu-nopasswd"
-chmod 440 "${ROOTFS}/etc/sudoers.d/99-nabu-nopasswd"
-# Keep wheel rule too for any future users added to the group.
-echo "%wheel ALL=(ALL:ALL) ALL" > "${ROOTFS}/etc/sudoers.d/wheel"
+# Filename is "zz-nabu-nopasswd" so it sorts last in /etc/sudoers.d/* — sudo
+# uses last-matching rule, so anything earlier (e.g. a future "wheel" rule
+# requiring a password) is correctly overridden for the nabu user.
+# Drop this file if you set a password and want sudo to prompt for it.
+echo 'nabu ALL=(ALL) NOPASSWD: ALL' > "${ROOTFS}/etc/sudoers.d/zz-nabu-nopasswd"
+chmod 440 "${ROOTFS}/etc/sudoers.d/zz-nabu-nopasswd"
+# Intentionally NOT writing /etc/sudoers.d/wheel: nabu is the only account
+# in this build, and the explicit nabu rule above covers it. Adding a wheel
+# rule that requires a password would override nabu's NOPASSWD because
+# sudo applies the last matching entry.
 chmod 440 "${ROOTFS}/etc/sudoers.d/wheel"
 
 # Copy skel dotfiles to user home (packages install to /etc/skel/)

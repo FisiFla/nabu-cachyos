@@ -23,7 +23,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 ## What This Is
 
 - **Arch Linux ARM** base system bootstrapped via `pacstrap` inside Docker
-- **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.14.11`) with CachyOS patches: **BORE scheduler**, **ADIOS I/O scheduler**, 1000Hz timer, full preemption
+- **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.17-wifi-fix`) with CachyOS patches: **BORE scheduler**, **BBR3 TCP**, 1000Hz timer, full preemption
 - **GNOME Shell** desktop on Wayland with **working on-screen keyboard** for touch input
 - **CachyOS GNOME settings** (dark theme, CachyOS wallpapers, dconf tuning)
 - **CachyOS theming and tools** built from PKGBUILDs, including `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, and `cachyos-packageinstaller`
@@ -41,7 +41,10 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **Direct boot** via Android boot.img format (CachyOS kernel + DTB, no GRUB)
 - WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
 - Auto-login via GDM, connect to WiFi via GNOME Settings (touch-friendly)
-- **First-run welcome dialog** (`nabu-welcome`) — touch-friendly GTK4 app that runs once on first login with shortcuts to change the default password, install apps, and read the README
+- **First-run welcome dialog** (`nabu-welcome`) — touch-friendly GTK4 app that runs once on first login with shortcuts to set a password (none by default), install apps, and read the README
+- **Tablet-style power button** — short press suspends, long press powers off (instead of systemd's default "every press powers off")
+- **`qbootctl` mark-boot-successful** — runs once after multi-user.target so the bootloader's A/B retry counter resets cleanly on every successful boot (slot B no longer drifts toward unbootable)
+- **NTP at boot** (`systemd-timesyncd`) — fixes the RTC drifting to year 2063 on cold boot, which breaks every SSL cert and pacman signature check
 
 ## What This Is NOT
 
@@ -53,7 +56,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 
 | Requirement | Details |
 |---|---|
-| Build machine | macOS with Apple Silicon (aarch64 Docker runs natively) or Linux aarch64 |
+| Build machine | macOS Apple Silicon (Docker runs natively), Linux aarch64, **or Linux x86_64** (the build cross-compiles the kernel via `aarch64-linux-gnu-gcc` + `ccache` to avoid qemu emulation on x86) |
 | Docker | Via [Colima](https://github.com/abiosoft/colima) on macOS, or Docker Desktop / native Docker on Linux |
 | Disk space | ~15 GB for build artifacts + Docker image |
 | Xiaomi Pad 5 | Bootloader must be unlocked |
@@ -92,7 +95,9 @@ WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
 | 5/6 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
 | 6/6 | `image/build-image.sh` | Creates the fastboot-flashed ext4 rootfs image (`linux.img.zst`) and checksums |
 
-**Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`) and built kernel artifacts under `output/kernel/` persist between builds. Delete `.cache/` and/or `output/kernel/` to force a full rebuild.
+**Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`), the kernel source tree (`.cache/kernel-build-<KERNEL_VERSION>/`), the ccache directory (`.cache/ccache/`) and built kernel artifacts under `output/kernel/` all persist between builds. Delete the relevant subdirectory of `.cache/` and/or `output/kernel/` to force a full rebuild.
+
+**Host kernel cross-compile (Linux x86_64 only):** When `aarch64-linux-gnu-gcc` and `mkbootimg` are present, `build.sh` builds the kernel natively on the host before launching Docker (stage 2.5/6). This skips qemu-aarch64 emulation entirely and brings the kernel compile from ~2 hours down to ~10-15 minutes. Force the legacy in-container path with `USE_HOST_KERNEL_BUILD=0`.
 
 **CachyOS theming** is built from [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS) and includes: `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white` cursor theme, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`.
 
@@ -172,10 +177,12 @@ If the tablet does not boot:
 
 | Account | Password | Notes |
 |---|---|---|
-| `nabu` | `cachyos` | Regular user, sudo with password, member of wheel/video/audio/input |
-| `root` | `cachyos` | SSH root login via key only (`prohibit-password`) |
+| `nabu` | _(none)_ | Auto-login via GDM. Passwordless `sudo` (`NOPASSWD: ALL` in `/etc/sudoers.d/zz-nabu-nopasswd`). Member of `wheel/video/audio/input`. |
+| `root` | _(none)_ | Account is locked from password login. SSH root only via key (`PermitRootLogin yes`, no password auth). |
 
-**Change passwords after first login:** `passwd && sudo passwd root`
+**Want a password?** Run `passwd` (no current password needed). To make `sudo` prompt for it, also delete `/etc/sudoers.d/zz-nabu-nopasswd`.
+
+PAM rejects empty-password login (no `nullok` set), so this combination is safe in practice: GDM auto-logs in without prompting, `sudo` doesn't ask, SSH requires keys.
 
 SSH is enabled by default. Connect after boot:
 ```bash
@@ -186,11 +193,13 @@ ssh nabu@<tablet-ip>            # via IP address
 ## Known Limitations
 
 - **Camera** -- no mainline driver, does not work on any Linux distro for nabu
-- **Suspend/resume** -- unreliable on sm8150 mainline
-- **CachyOS kernel patches** -- BBR3 and cachy-arm patches may not apply cleanly to the sm8150 kernel tree; they are skipped gracefully and the kernel works without them. BBR3 specifically fails on 1 hunk in `net/ipv4/tcp_input.c` against `sm8150/6.14.11` — the rest of the patch applies cleanly. A manual rebase is the next step there.
-- **dbus-broker replaced with dbus-daemon** -- the nabu kernel lacks namespace support required by dbus-broker; the build replaces it with classic dbus-daemon
-- **Auto-rotation** -- the LSM6DSO accelerometer is on I2C bus QUP SE2 (GPIO 126-127), but these pins are reserved by TrustZone secure firmware (`gpio-reserved-ranges`). Modifying the reservation causes boot failure. Auto-rotation requires either modified firmware or ADSP sensor hub support
+- **Auto-rotation** -- the LSM6DSO accelerometer is on I2C bus QUP SE2 (GPIO 126-127), but these pins are reserved by TrustZone secure firmware. Touching them causes the kernel to fail at boot (confirmed: shrinking `gpio-reserved-ranges` drains the A/B retry counter in seconds). The remaining path is the ADSP/SLPI userspace sensor stack (`libssc` + `sns-reg` + a patched `iio-sensor-proxy`) — a separate multi-day project. Manual rotation works fine via Settings → Displays → Orientation.
+- **Suspend/resume** -- one-cycle validated (short-press power suspends, second press resumes cleanly), reliability over many cycles not yet tested. WiFi/BT keep-alive on suspend not validated.
+- **Warm-reboot black screen** -- `fastboot reboot` and `sudo systemctl reboot` sometimes drop into a black screen with no display + no USB enumeration. Cold-power-cycle recovers (hold Power ~15 sec, then short-press). Cause: panel-init race on warm transition through the bootloader. Cold boot from full power-off is reliable.
+- **`cachyos-packageinstaller`** -- AUR PKGBUILD currently fails on aarch64 against ALARM headers; the build catches and skips it. No alternative GUI installer is shipped right now.
+- **`dbus-broker` replaced with `dbus-daemon`** -- the sm8150 mainline kernel lacks namespace support required by dbus-broker
 - **Pen pressure sensitivity** -- does not work in landscape mode (known upstream issue)
+- **CachyOS kernel patches** -- ADIOS and cachy-arm patches still don't apply cleanly against the sm8150 tree and are skipped (build continues without them). BORE and BBR3 _do_ apply on the 6.17 tree.
 
 ### Why GNOME instead of KDE?
 
@@ -210,7 +219,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 | | ADIOS I/O scheduler | Applied + active |
 | | 1000Hz timer tick | Applied |
 | | Full preemption (PREEMPT) | Applied |
-| | BBR3 TCP | Skipped — 1 hunk in `net/ipv4/tcp_input.c` conflicts with the sm8150 tree, needs manual rebase |
+| | BBR3 TCP | Applied (the 6.14 `tcp_input.c` conflict is gone on the 6.17 tree) |
 | | sched-ext | Config enabled + `scx-scheds` userspace tools shipped (start with `systemctl start scx_lavd`) |
 | **System** | CachyOS sysctl tuning | Full (via cachyos-settings) |
 | | MGLRU | Enabled |
@@ -279,7 +288,7 @@ Applied via overlay configs in `rootfs/overlay/` and the `cachyos-settings` pack
 | Patch | Description | Status |
 |---|---|---|
 | `0001-bore.patch` | BORE CPU scheduler | Critical -- build fails if this doesn't apply |
-| `0002-bbr3.patch` | BBR3 TCP congestion control | Best-effort -- skipped if it doesn't apply |
+| `0002-bbr3.patch` | BBR3 TCP congestion control | Applied on the 6.17 tree |
 | `0003-adios.patch` | ADIOS I/O scheduler | Best-effort |
 | `0004-cachy-arm.patch` | ARM-compatible bits from CachyOS (HZ options, PREEMPT_LAZY, THP tuning, v4l2loopback) | Best-effort |
 

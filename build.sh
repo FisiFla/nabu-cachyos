@@ -35,6 +35,32 @@ fi
 
 echo "  Qualcomm WiFi daemons: built from source during rootfs stage"
 
+# ─── Optional: cross-compile kernel on the host (fast path) ────────
+#
+# Qemu user-mode arm64 emulation inside Docker makes the kernel compile
+# ~5-10x slower than a native cross-build. On Linux x86_64 with the
+# aarch64 toolchain installed, we build the kernel on the host BEFORE
+# launching Docker. The in-container kernel-build path then no-ops
+# because output/kernel/Image.gz already exists.
+#
+# Set USE_HOST_KERNEL_BUILD=0 to force the legacy in-Docker build.
+# On macOS Apple Silicon this stays no-op (host is already arm64 so
+# Docker runs natively — no qemu overhead to dodge).
+
+USE_HOST_KERNEL_BUILD="${USE_HOST_KERNEL_BUILD:-auto}"
+
+host_arch="$(uname -m)"
+host_os="$(uname -s)"
+if [ "${USE_HOST_KERNEL_BUILD}" = "auto" ]; then
+    if [ "${host_os}" = "Linux" ] && [ "${host_arch}" = "x86_64" ] \
+       && command -v aarch64-linux-gnu-gcc &>/dev/null \
+       && command -v mkbootimg &>/dev/null; then
+        USE_HOST_KERNEL_BUILD=1
+    else
+        USE_HOST_KERNEL_BUILD=0
+    fi
+fi
+
 # ─── Step 1: Download ALARM rootfs tarball ──────────────────────────
 
 ALARM_TARBALL="ArchLinuxARM-aarch64-latest.tar.gz"
@@ -50,6 +76,32 @@ fi
 
 echo "[2/6] Building Docker image..."
 docker build -t nabu-cachyos-builder "${SCRIPT_DIR}"
+
+# ─── Step 2.5: Host-native kernel cross-compile (optional fast path) ─
+#
+# Runs OUTSIDE Docker on x86_64 Linux hosts. Produces Image.gz / dtb /
+# modules / boot.img directly into output/, which the in-container
+# kernel stage then detects and skips.
+
+if [ "${USE_HOST_KERNEL_BUILD}" = "1" ]; then
+    echo "[2.5/6] Cross-compiling kernel on host (aarch64-linux-gnu-, ccache)..."
+    # Persistent kernel build tree per kernel version → enables incremental
+    # rebuilds when only patches change.
+    HOST_KBUILD_DIR="${SCRIPT_DIR}/.cache/kernel-build-${KERNEL_VERSION}"
+    mkdir -p "${HOST_KBUILD_DIR}" "${SCRIPT_DIR}/output/kernel"
+    export CCACHE_DIR="${CCACHE_DIR:-${SCRIPT_DIR}/.cache/ccache}"
+    mkdir -p "${CCACHE_DIR}"
+    BUILD_DIR="${HOST_KBUILD_DIR}" \
+    OUTPUT_DIR="${SCRIPT_DIR}/output/kernel" \
+    BOOT_IMG_OUT="${SCRIPT_DIR}/output/boot.img" \
+    ARCH=arm64 \
+    CROSS_COMPILE=aarch64-linux-gnu- \
+    CC="ccache aarch64-linux-gnu-gcc" \
+        bash "${SCRIPT_DIR}/kernel/build-kernel.sh"
+    echo "[2.5/6] Host kernel build done — container will skip stage 4."
+else
+    echo "[2.5/6] Skipping host kernel build (USE_HOST_KERNEL_BUILD=${USE_HOST_KERNEL_BUILD})."
+fi
 
 # ─── Step 3: Run build inside Docker ───────────────────────────────
 

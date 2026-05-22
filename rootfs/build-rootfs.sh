@@ -225,12 +225,23 @@ echo "LANG=en_US.UTF-8" > "${ROOTFS}/etc/locale.conf"
 arch-chroot "${ROOTFS}" ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 
 # User + root accounts
+# nabu is the daily-driver account. By default it ships with NO password —
+# this is a tablet, not a multi-user server. The user opts IN to a password
+# via gnome-control-center (nabu-welcome links there) or `passwd`. Empty
+# passwords are still rejected by PAM (no `nullok` set), so accidental
+# password-bypass login isn't possible — sudo just doesn't prompt, and SSH
+# requires keys.
 arch-chroot "${ROOTFS}" useradd -m -G wheel,video,audio,input -s /usr/bin/zsh nabu
-echo "nabu:cachyos" | arch-chroot "${ROOTFS}" chpasswd
-echo "root:cachyos" | arch-chroot "${ROOTFS}" chpasswd
+arch-chroot "${ROOTFS}" passwd -d nabu
+arch-chroot "${ROOTFS}" passwd -d root
 # NOTE: Do NOT use chage -d 0 (password expiry breaks GDM auto-login)
 
-# Sudo for wheel group (password required)
+# Passwordless sudo for nabu (matches the "no password by default" stance).
+# Drop this file by editing /etc/sudoers.d/99-nabu-nopasswd if you set a
+# password and want sudo to prompt for it.
+echo 'nabu ALL=(ALL) NOPASSWD: ALL' > "${ROOTFS}/etc/sudoers.d/99-nabu-nopasswd"
+chmod 440 "${ROOTFS}/etc/sudoers.d/99-nabu-nopasswd"
+# Keep wheel rule too for any future users added to the group.
 echo "%wheel ALL=(ALL:ALL) ALL" > "${ROOTFS}/etc/sudoers.d/wheel"
 chmod 440 "${ROOTFS}/etc/sudoers.d/wheel"
 

@@ -75,9 +75,13 @@ for fw in a630_sqe.fw a640_gmu.bin a640_zap.mbn; do
     cp -f "${FIRMWARE_DIR}/${fw}" "${ROOTFS}/usr/lib/firmware/qcom/" 2>/dev/null || true
 done
 
-# Touch firmware: driver looks for novatek/novatek_nt36523_fw.bin
+# Touch firmware: driver looks for novatek/novatek_nt36523_fw.bin but the
+# nabu-firmware repo ships it at the flat path. Symlink (mirrors the live fix
+# applied during NAS-228 debug — kept as symlink so any future blob refresh
+# at the flat path is picked up automatically).
 mkdir -p "${ROOTFS}/usr/lib/firmware/novatek"
-cp -f "${FIRMWARE_DIR}/novatek_nt36523_fw.bin" "${ROOTFS}/usr/lib/firmware/novatek/" 2>/dev/null || true
+ln -sf ../novatek_nt36523_fw.bin \
+    "${ROOTFS}/usr/lib/firmware/novatek/novatek_nt36523_fw.bin"
 
 # Audio codec firmware: cs35l41 files need to be under cirrus/
 mkdir -p "${ROOTFS}/usr/lib/firmware/cirrus"

@@ -1,0 +1,16 @@
+# Default desktop wallpaper for nabu builds.
+#
+# Cachyos-wallpapers is built in rootfs/build-theming.sh and installs to
+# /usr/share/wallpapers/cachyos-wallpapers/. Out of the box GNOME's
+# picture-uri points at /usr/share/backgrounds/gnome/adwaita-l.jxl which
+# we don't ship (no gnome-backgrounds package, deliberately small build),
+# so the desktop fell back to the primary-color #023c88 — flat blue, no
+# wallpaper.
+#
+# Pick a CachyOS-branded default. Users can override per-user via
+# Settings → Background.
+
+[org/gnome/desktop/background]
+picture-uri='file:///usr/share/wallpapers/cachyos-wallpapers/Cachy_Topography.jpg'
+picture-uri-dark='file:///usr/share/wallpapers/cachyos-wallpapers/Cachy_Topography.jpg'
+picture-options='zoom'

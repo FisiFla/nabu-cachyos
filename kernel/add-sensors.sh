@@ -21,10 +21,15 @@ fi
 # WARNING: Do NOT delete the line entirely — that breaks TrustZone boot!
 echo "Fixing gpio-reserved-ranges (freeing GPIO 126-127 for sensor I2C)..."
 if grep -q "gpio-reserved-ranges" "$DTS"; then
-    sed -i 's/gpio-reserved-ranges = <126 4>/gpio-reserved-ranges = <128 2>/' "$DTS"
-    sed -i 's/gpio-reserved-ranges = <0 4>, <126 4>/gpio-reserved-ranges = <0 4>, <128 2>/' "$DTS"
+    sed -i -E 's/gpio-reserved-ranges = <126[[:space:]]+4>/gpio-reserved-ranges = <128 2>/' "$DTS"
+    sed -i -E 's/gpio-reserved-ranges = <0[[:space:]]+4>,[[:space:]]*<126[[:space:]]+4>/gpio-reserved-ranges = <0 4>, <128 2>/' "$DTS"
     echo "  Fixed in $DTS"
     grep "gpio-reserved-ranges" "$DTS"
+    if ! grep -qE 'gpio-reserved-ranges = <128[[:space:]]+2>|gpio-reserved-ranges = <0[[:space:]]+4>,[[:space:]]*<128[[:space:]]+2>' "$DTS"; then
+        echo "ERROR: gpio-reserved-ranges substitution did not take effect in $DTS." >&2
+        echo "       The DTS format may have changed upstream. Inspect manually before booting." >&2
+        exit 1
+    fi
 fi
 
 # Find the correct I2C label for 0x888000

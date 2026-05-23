@@ -9,7 +9,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Build rootfs in container-local filesystem (not bind mount) to avoid
 # macOS Docker volume lock issues with pacman, then copy to output.
 ROOTFS="/tmp/rootfs-build"
-FINAL_ROOTFS="/build/output/rootfs"
 KERNEL_DIR="/build/output/kernel"
 FIRMWARE_DIR="/build/output/firmware/nabu-firmware"
 
@@ -29,8 +28,8 @@ if [ -f "${PACSTRAP_CACHE}" ]; then
 else
     echo "Bootstrapping Arch Linux ARM (first run, will be cached)..."
     rm -f /var/lib/pacman/db.lck 2>/dev/null || true
-    pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" \
-        $(cat "${SCRIPT_DIR}/packages.txt" | grep -v '^#' | grep -v '^$' | tr '\n' ' ')
+    mapfile -t packages < <(grep -vE '^(#|$)' "${SCRIPT_DIR}/packages.txt")
+    pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" "${packages[@]}"
     # Disable Landlock sandbox in rootfs pacman (fails inside Docker)
     sed -i '/^\[options\]/a DisableSandbox' "${ROOTFS}/etc/pacman.conf"
     # Cache for next run
@@ -131,10 +130,11 @@ echo "Building AUR packages..."
 AUR_BUILD="/tmp/aur-build"
 mkdir -p "${AUR_BUILD}"
 chown builder:builder "${AUR_BUILD}"
-for pkg in $(cat "${SCRIPT_DIR}/packages-aur.txt" | grep -v '^#' | grep -v '^$'); do
+mapfile -t aur_packages < <(grep -vE '^(#|$)' "${SCRIPT_DIR}/packages-aur.txt")
+for pkg in "${aur_packages[@]}"; do
     echo "  Building ${pkg} from AUR..."
-    if [ -d "${AUR_BUILD}/${pkg}" ]; then
-        rm -rf "${AUR_BUILD}/${pkg}"
+    if [ -d "${AUR_BUILD:?}/${pkg:?}" ]; then
+        rm -rf "${AUR_BUILD:?}/${pkg:?}"
     fi
     sudo -u builder git clone --depth 1 "https://aur.archlinux.org/${pkg}.git" "${AUR_BUILD}/${pkg}" || {
         echo "  WARNING: Failed to clone ${pkg}, skipping"

@@ -178,7 +178,7 @@ for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config cachyos
     }
     pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkg}" ]; then
-        pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+        pacman -U --noconfirm --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
             "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}/${pkg}"
         echo "    Installed ${pkg}"
     fi
@@ -193,25 +193,8 @@ rm -rf "${ROOTFS}/usr/share/zsh-theme-powerlevel10k/.git" 2>/dev/null || true
 git clone --depth 1 https://github.com/zsh-users/zsh-history-substring-search.git "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search" 2>/dev/null || true
 rm -rf "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search/.git" 2>/dev/null || true
 
-# Create default p10k config (skip interactive wizard — no keyboard on tablet)
-cat > "${ROOTFS}/etc/skel/.p10k.zsh" << 'P10KEOF'
-POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
-POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(os_icon dir vcs)
-POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status command_execution_time battery)
-POWERLEVEL9K_MODE="nerdfont-complete"
-POWERLEVEL9K_PROMPT_ON_NEWLINE=true
-POWERLEVEL9K_RPROMPT_ON_NEWLINE=false
-POWERLEVEL9K_MULTILINE_FIRST_PROMPT_PREFIX=""
-POWERLEVEL9K_MULTILINE_LAST_PROMPT_PREFIX="%F{014}❯%f "
-POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION="🐧"
-POWERLEVEL9K_DIR_BACKGROUND="024"
-POWERLEVEL9K_DIR_FOREGROUND="white"
-P10KEOF
-
-# Prepend wizard disable to skel zshrc
-echo 'export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true' > "${ROOTFS}/etc/skel/.zshrc.tmp"
-cat "${ROOTFS}/etc/skel/.zshrc" >> "${ROOTFS}/etc/skel/.zshrc.tmp" 2>/dev/null || echo 'source /usr/share/cachyos-zsh-config/cachyos-config.zsh' >> "${ROOTFS}/etc/skel/.zshrc.tmp"
-mv "${ROOTFS}/etc/skel/.zshrc.tmp" "${ROOTFS}/etc/skel/.zshrc"
+# .zshrc and .p10k.zsh come from rootfs/overlay/home/nabu/ (copied at line 92).
+# That overlay is the single source of truth — do not re-write them here.
 
 # 9. System configuration
 echo "Configuring system..."

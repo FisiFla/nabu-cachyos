@@ -28,12 +28,12 @@ echo "  3. Put the tablet into fastboot (Vol Down + Power), connect via"
 echo "     USB-C, then flash:"
 echo "       bash release/dist/join-and-flash.sh"
 echo
-echo "Before flashing, take a rootfs snapshot on the tablet so you can"
-echo "roll back if the new kernel misbehaves:"
-echo "       snapshot pre-kernel-update"
+echo "If the new kernel doesn't boot, slot A (Android) is preserved as a"
+echo "fallback — hold Vol Down + Power to enter fastboot, then run"
+echo "'fastboot set_active a' to return to Android."
 echo
-echo "Only sm8150/6.14.x kernel branches are known to boot reliably on"
-echo "nabu. Other branches (notably 6.16+) may leave the tablet unable"
-echo "to boot."
+echo "Build currently defaults to sm8150/6.17-wifi-fix (boots reliably on"
+echo "nabu and applies BORE/BBR3 cleanly). 6.14.x is the previous known-"
+echo "good. Other untested sm8150-mainline branches may not boot."
 echo
 exit 0

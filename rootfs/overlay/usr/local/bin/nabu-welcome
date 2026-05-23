@@ -79,9 +79,12 @@ class WelcomeApp(Gtk.Application):
         body = Gtk.Label(
             label=(
                 "This is your first boot of CachyOS on the Xiaomi Pad 5. "
-                "The default user and password are both nabu and cachyos, so "
-                "please change the password before you do anything else. "
-                "Use the buttons below to get started."
+                "The default user is 'nabu' and ships with NO password — "
+                "intentional, because a lock screen with a blank password "
+                "is unrecoverable on this build. If you want a password "
+                "(needed before enabling a lock screen or exposing SSH "
+                "with PasswordAuthentication), set one via the button "
+                "below. Otherwise, use the other buttons to get started."
             )
         )
         body.set_wrap(True)

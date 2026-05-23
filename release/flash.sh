@@ -23,9 +23,13 @@ fastboot devices | grep -q . || { echo "ERROR: No device found. Boot tablet into
 echo "  Device found."
 echo ""
 
-read -p "Ready to flash? This will erase Android userdata. [y/N] " -n 1 -r
-echo
-[[ $REPLY =~ ^[Yy]$ ]] || exit 0
+if [ "${FORCE_FLASH:-0}" = "1" ]; then
+    echo "FORCE_FLASH=1 set, skipping confirmation."
+else
+    read -p "Ready to flash? This will erase Android userdata. [y/N] " -n 1 -r
+    echo
+    [[ $REPLY =~ ^[Yy]$ ]] || exit 0
+fi
 
 echo ""
 echo "[1/5] Erasing dtbo_b + flashing vbmeta..."

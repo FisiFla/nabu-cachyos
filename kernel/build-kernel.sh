@@ -57,13 +57,13 @@ cd "${BUILD_DIR}/linux"
 PATCH_SENTINEL=".cachyos-patches-applied"
 if [ ! -f "${PATCH_SENTINEL}" ]; then
     # BORE (0001) is critical. Others are best-effort — the kernel works without them.
-    CRITICAL_PATCHES="0001-bore"
+    CRITICAL_PATCHES=("0001-bore")
     echo "Applying patches..."
     for patch in "${SCRIPT_DIR}/patches/"*.patch; do
         patchname="$(basename "${patch}")"
         echo "  Applying ${patchname}..."
         is_critical=false
-        for cp in ${CRITICAL_PATCHES}; do
+        for cp in "${CRITICAL_PATCHES[@]}"; do
             [[ "${patchname}" == "${cp}"* ]] && is_critical=true
         done
         if git apply --check "${patch}" 2>/dev/null; then

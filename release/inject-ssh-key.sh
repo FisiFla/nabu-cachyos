@@ -87,6 +87,12 @@ docker run --rm \
         set -euo pipefail
         debugfs -w -f /work/debugfs.cmds /image/linux.img >/work/debugfs.stdout 2>/work/debugfs.stderr || true
         debugfs -R "stat /home/nabu/.ssh/authorized_keys" /image/linux.img >/work/debugfs.verify 2>&1
+        if ! grep -q "^Inode:" /work/debugfs.verify; then
+            echo "ERROR: SSH key injection failed — debugfs could not stat /home/nabu/.ssh/authorized_keys" >&2
+            echo "       debugfs stderr:" >&2
+            sed "s/^/         /" /work/debugfs.stderr >&2
+            exit 1
+        fi
         status=0
         e2fsck -fy /image/linux.img >/dev/null || status=$?
         if [ "$status" -gt 1 ]; then

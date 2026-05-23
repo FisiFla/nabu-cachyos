@@ -319,7 +319,7 @@ nabu-cachyos/
 │       └── home/nabu/          # User dotfiles and utility scripts
 │           ├── .config/        # GNOME/app configs
 │           ├── .zshrc          # CachyOS zsh config
-│           └── bin/            # Helper scripts (snapshot, rollback, kernel-update, install-containers)
+│           └── bin/            # Helper scripts (kernel-update, install-containers)
 ├── image/
 │   └── build-image.sh          # Creates the flashable linux.img.zst rootfs image
 ├── release/

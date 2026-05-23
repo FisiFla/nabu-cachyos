@@ -21,6 +21,7 @@ rm -rf "${ROOTFS}"
 mkdir -p "${ROOTFS}"
 # Bind-mount to make it a mount point (arch-chroot requires this)
 mount --bind "${ROOTFS}" "${ROOTFS}"
+trap 'umount "${ROOTFS}" 2>/dev/null || true' EXIT
 
 if [ -f "${PACSTRAP_CACHE}" ]; then
     echo "Restoring cached pacstrap rootfs..."

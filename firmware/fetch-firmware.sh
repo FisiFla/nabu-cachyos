@@ -6,11 +6,21 @@ mkdir -p "${OUTPUT_DIR}"
 
 echo "--- Fetching nabu firmware blobs ---"
 
+# Bump this SHA to pull in new upstream firmware updates.
+NABU_FIRMWARE_COMMIT="60bcc8485fe3b36861a4b18bfd87d4784f285716"
+
 if [ ! -d "${OUTPUT_DIR}/nabu-firmware" ]; then
-    git clone --depth 1 https://github.com/map220v/nabu-firmware.git \
-        "${OUTPUT_DIR}/nabu-firmware"
+    git clone https://github.com/map220v/nabu-firmware.git "${OUTPUT_DIR}/nabu-firmware"
+    git -C "${OUTPUT_DIR}/nabu-firmware" checkout "${NABU_FIRMWARE_COMMIT}"
 else
     echo "Firmware already downloaded, skipping."
+    # Verify the cached clone is at the pinned commit
+    actual="$(git -C "${OUTPUT_DIR}/nabu-firmware" rev-parse HEAD)"
+    if [ "${actual}" != "${NABU_FIRMWARE_COMMIT}" ]; then
+        echo "ERROR: cached firmware clone is at ${actual}, expected ${NABU_FIRMWARE_COMMIT}." >&2
+        echo "       Delete ${OUTPUT_DIR}/nabu-firmware and re-run to refresh." >&2
+        exit 1
+    fi
 fi
 
 echo "--- Firmware ready at ${OUTPUT_DIR}/nabu-firmware ---"

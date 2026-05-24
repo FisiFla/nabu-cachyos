@@ -1,0 +1,10 @@
+--- mem_sleep ---
+s2idle [deep]
+--- state ---
+freeze mem
+--- pm_freeze_timeout ---
+1000
+--- suspend_stats ---
+cat: /sys/power/suspend_stats: Is a directory
+--- regulators ---
+94

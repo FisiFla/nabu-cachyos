@@ -1,0 +1,200 @@
+[    1.538014] cs35l41 2-0042: bitoffset= 31, word_offset=11, bit_sum mod 32=23
+[    1.538618] cs35l41 2-0042: bitoffset= 4, word_offset=12, bit_sum mod 32=28
+[    1.539215] cs35l41 2-0042: bitoffset= 9, word_offset=12, bit_sum mod 32=1
+[    1.539812] cs35l41 2-0042: bitoffset= 14, word_offset=12, bit_sum mod 32=6
+[    1.540411] cs35l41 2-0042: bitoffset= 19, word_offset=12, bit_sum mod 32=11
+[    1.541007] cs35l41 2-0042: bitoffset= 24, word_offset=12, bit_sum mod 32=16
+[    1.541604] cs35l41 2-0042: bitoffset= 29, word_offset=12, bit_sum mod 32=21
+[    1.542201] cs35l41 2-0042: bitoffset= 2, word_offset=13, bit_sum mod 32=26
+[    1.542798] cs35l41 2-0042: bitoffset= 7, word_offset=13, bit_sum mod 32=31
+[    1.543395] cs35l41 2-0042: bitoffset= 12, word_offset=13, bit_sum mod 32=4
+[    1.543992] cs35l41 2-0042: bitoffset= 17, word_offset=13, bit_sum mod 32=9
+[    1.544589] cs35l41 2-0042: bitoffset= 22, word_offset=13, bit_sum mod 32=14
+[    1.545186] cs35l41 2-0042: bitoffset= 27, word_offset=13, bit_sum mod 32=19
+[    1.545783] cs35l41 2-0042: bitoffset= 0, word_offset=14, bit_sum mod 32=24
+[    1.546380] cs35l41 2-0042: bitoffset= 10, word_offset=14, bit_sum mod 32=2
+[    1.546978] cs35l41 2-0042: bitoffset= 20, word_offset=14, bit_sum mod 32=12
+[    1.547575] cs35l41 2-0042: bitoffset= 30, word_offset=14, bit_sum mod 32=22
+[    1.548173] cs35l41 2-0042: bitoffset= 8, word_offset=15, bit_sum mod 32=0
+[    1.548770] cs35l41 2-0042: bitoffset= 18, word_offset=15, bit_sum mod 32=10
+[    1.549366] cs35l41 2-0042: bitoffset= 28, word_offset=15, bit_sum mod 32=20
+[    1.549963] cs35l41 2-0042: bitoffset= 6, word_offset=16, bit_sum mod 32=30
+[    1.550561] cs35l41 2-0042: bitoffset= 16, word_offset=16, bit_sum mod 32=8
+[    1.551158] cs35l41 2-0042: bitoffset= 26, word_offset=16, bit_sum mod 32=18
+[    1.551755] cs35l41 2-0042: bitoffset= 4, word_offset=17, bit_sum mod 32=28
+[    1.552352] cs35l41 2-0042: bitoffset= 14, word_offset=17, bit_sum mod 32=6
+[    1.552948] cs35l41 2-0042: bitoffset= 24, word_offset=17, bit_sum mod 32=16
+[    1.553546] cs35l41 2-0042: bitoffset= 2, word_offset=18, bit_sum mod 32=26
+[    1.554143] cs35l41 2-0042: bitoffset= 12, word_offset=18, bit_sum mod 32=4
+[    1.554740] cs35l41 2-0042: bitoffset= 22, word_offset=18, bit_sum mod 32=14
+[    1.555337] cs35l41 2-0042: bitoffset= 0, word_offset=19, bit_sum mod 32=24
+[    1.555934] cs35l41 2-0042: bitoffset= 10, word_offset=19, bit_sum mod 32=2
+[    1.556531] cs35l41 2-0042: bitoffset= 20, word_offset=19, bit_sum mod 32=12
+[    1.557148] cs35l41 2-0042: bitoffset= 30, word_offset=19, bit_sum mod 32=22
+[    1.557775] cs35l41 2-0042: bitoffset= 8, word_offset=20, bit_sum mod 32=0
+[    1.558407] cs35l41 2-0042: bitoffset= 18, word_offset=20, bit_sum mod 32=10
+[    1.559034] cs35l41 2-0042: bitoffset= 28, word_offset=20, bit_sum mod 32=20
+[    1.559382] cs35l41 2-0042: bitoffset= 1, word_offset=21, bit_sum mod 32=25
+[    1.559731] cs35l41 2-0042: bitoffset= 6, word_offset=21, bit_sum mod 32=30
+[    1.560082] cs35l41 2-0042: bitoffset= 10, word_offset=21, bit_sum mod 32=2
+[    1.560431] cs35l41 2-0042: bitoffset= 14, word_offset=21, bit_sum mod 32=6
+[    1.561058] cs35l41 2-0042: bitoffset= 15, word_offset=21, bit_sum mod 32=7
+[    1.561690] cs35l41 2-0042: bitoffset= 22, word_offset=21, bit_sum mod 32=14
+[    1.562037] cs35l41 2-0042: bitoffset= 31, word_offset=21, bit_sum mod 32=23
+[    1.562383] cs35l41 2-0042: bitoffset= 0, word_offset=22, bit_sum mod 32=24
+[    1.562729] cs35l41 2-0042: bitoffset= 7, word_offset=22, bit_sum mod 32=31
+[    1.562732] cs35l41 2-0042: bitoffset= 8, word_offset=22, bit_sum mod 32=0
+[    1.563015] cs35l41 2-0042: bitoffset= 16, word_offset=22, bit_sum mod 32=8
+[    1.563298] cs35l41 2-0042: bitoffset= 24, word_offset=22, bit_sum mod 32=16
+[    1.563583] cs35l41 2-0042: bitoffset= 0, word_offset=23, bit_sum mod 32=24
+[    1.563868] cs35l41 2-0042: bitoffset= 8, word_offset=23, bit_sum mod 32=0
+[    1.578706] cs35l41 2-0042: Cirrus Logic CS35L41 (35a40), Revision: B2
+[    1.578782] cs35l41 2-0042: cs35l41 probe X
+[    1.578832] cs35l41 2-0040: ZL: cs35l41 i2c probe start
+[    1.578873] cs35l41 2-0040: ZL: before cs35l41 probe
+[    1.578877] cs35l41 2-0040: cs35l41 probe E
+[    1.578898] cs35l41 2-0040: 2-0040 supply VA not found, using dummy regulator
+[    1.578917] cs35l41 2-0040: 2-0040 supply VP not found, using dummy regulator
+[    1.578924] cs35l41 2-0040: num_fast_switch:4
+[    1.578929] cs35l41 2-0040: 0:BR-music.txt
+[    1.578932] cs35l41 2-0040: 1:BR-voice.txt
+[    1.578936] cs35l41 2-0040: 2:BR-voip.txt
+[    1.578939] cs35l41 2-0040: 3:BR-misc.txt
+[    1.578957] cs35l41 2-0040: Reset line busy, assuming shared reset
+[    1.580969] [ds28e16] DS28E16_standard_cmd_flow: DS28E16_standard_cmd_flow: crc2 error!
+[    1.581078] [ds28e16] ds28el16_get_page_data_retry: read page data communication start... 1
+[    1.581079] [ds28e16] DS28E16_cmd_readMemory: DS28E16_cmd_readMemory write_buf:
+[    1.581080] [ds28e16] DS28E16_cmd_readMemory: 02 44 01
+[    1.581081] [ds28e16] DS28E16_standard_cmd_flow: DS28E16_standard_cmd_flow start
+[    1.592046] cs35l41 2-0040: bitoffset= 16, word_offset=2, bit_sum mod 32=8
+[    1.592678] cs35l41 2-0040: bitoffset= 20, word_offset=2, bit_sum mod 32=12
+[    1.593309] cs35l41 2-0040: bitoffset= 21, word_offset=2, bit_sum mod 32=13
+[    1.593659] cs35l41 2-0040: bitoffset= 27, word_offset=2, bit_sum mod 32=19
+[    1.594008] cs35l41 2-0040: bitoffset= 31, word_offset=2, bit_sum mod 32=23
+[    1.594638] cs35l41 2-0040: bitoffset= 3, word_offset=3, bit_sum mod 32=27
+[    1.594987] cs35l41 2-0040: bitoffset= 7, word_offset=3, bit_sum mod 32=31
+[    1.595336] cs35l41 2-0040: bitoffset= 9, word_offset=3, bit_sum mod 32=1
+[    1.595685] cs35l41 2-0040: bitoffset= 16, word_offset=3, bit_sum mod 32=8
+[    1.596033] cs35l41 2-0040: bitoffset= 23, word_offset=3, bit_sum mod 32=15
+[    1.596382] cs35l41 2-0040: bitoffset= 31, word_offset=3, bit_sum mod 32=23
+[    1.596732] cs35l41 2-0040: bitoffset= 7, word_offset=4, bit_sum mod 32=31
+[    1.597364] cs35l41 2-0040: bitoffset= 14, word_offset=4, bit_sum mod 32=6
+[    1.597713] cs35l41 2-0040: bitoffset= 21, word_offset=4, bit_sum mod 32=13
+[    1.598344] cs35l41 2-0040: bitoffset= 29, word_offset=4, bit_sum mod 32=21
+[    1.598971] cs35l41 2-0040: bitoffset= 5, word_offset=5, bit_sum mod 32=29
+[    1.599320] cs35l41 2-0040: bitoffset= 12, word_offset=5, bit_sum mod 32=4
+[    1.599668] cs35l41 2-0040: bitoffset= 19, word_offset=5, bit_sum mod 32=11
+[    1.600020] cs35l41 2-0040: bitoffset= 27, word_offset=5, bit_sum mod 32=19
+[    1.600368] cs35l41 2-0040: bitoffset= 3, word_offset=6, bit_sum mod 32=27
+[    1.600717] cs35l41 2-0040: bitoffset= 10, word_offset=6, bit_sum mod 32=2
+[    1.601065] cs35l41 2-0040: bitoffset= 17, word_offset=6, bit_sum mod 32=9
+[    1.601414] cs35l41 2-0040: bitoffset= 25, word_offset=6, bit_sum mod 32=17
+[    1.601762] cs35l41 2-0040: bitoffset= 1, word_offset=7, bit_sum mod 32=25
+[    1.602393] cs35l41 2-0040: bitoffset= 9, word_offset=7, bit_sum mod 32=1
+[    1.603024] cs35l41 2-0040: bitoffset= 16, word_offset=7, bit_sum mod 32=8
+[    1.603657] cs35l41 2-0040: bitoffset= 24, word_offset=7, bit_sum mod 32=16
+[    1.604283] cs35l41 2-0040: bitoffset= 2, word_offset=8, bit_sum mod 32=26
+[    1.604914] cs35l41 2-0040: bitoffset= 14, word_offset=8, bit_sum mod 32=6
+[    1.605546] cs35l41 2-0040: bitoffset= 15, word_offset=8, bit_sum mod 32=7
+[    1.606177] cs35l41 2-0040: bitoffset= 21, word_offset=8, bit_sum mod 32=13
+[    1.606809] cs35l41 2-0040: bitoffset= 22, word_offset=8, bit_sum mod 32=14
+[    1.607158] cs35l41 2-0040: bitoffset= 28, word_offset=8, bit_sum mod 32=20
+[    1.607506] cs35l41 2-0040: bitoffset= 29, word_offset=8, bit_sum mod 32=21
+[    1.608133] cs35l41 2-0040: bitoffset= 6, word_offset=9, bit_sum mod 32=30
+[    1.608760] cs35l41 2-0040: bitoffset= 11, word_offset=9, bit_sum mod 32=3
+[    1.609386] cs35l41 2-0040: bitoffset= 20, word_offset=9, bit_sum mod 32=12
+[    1.610019] cs35l41 2-0040: bitoffset= 28, word_offset=9, bit_sum mod 32=20
+[    1.610651] cs35l41 2-0040: bitoffset= 4, word_offset=10, bit_sum mod 32=28
+[    1.611278] cs35l41 2-0040: bitoffset= 12, word_offset=10, bit_sum mod 32=4
+[    1.611905] cs35l41 2-0040: bitoffset= 20, word_offset=10, bit_sum mod 32=12
+[    1.612537] cs35l41 2-0040: bitoffset= 23, word_offset=10, bit_sum mod 32=15
+[    1.613168] cs35l41 2-0040: bitoffset= 28, word_offset=10, bit_sum mod 32=20
+[    1.613800] cs35l41 2-0040: bitoffset= 1, word_offset=11, bit_sum mod 32=25
+[    1.614149] cs35l41 2-0040: bitoffset= 6, word_offset=11, bit_sum mod 32=30
+[    1.614780] cs35l41 2-0040: bitoffset= 11, word_offset=11, bit_sum mod 32=3
+[    1.615129] cs35l41 2-0040: bitoffset= 16, word_offset=11, bit_sum mod 32=8
+[    1.615760] cs35l41 2-0040: bitoffset= 21, word_offset=11, bit_sum mod 32=13
+[    1.616391] cs35l41 2-0040: bitoffset= 26, word_offset=11, bit_sum mod 32=18
+[    1.617025] cs35l41 2-0040: bitoffset= 31, word_offset=11, bit_sum mod 32=23
+[    1.617656] cs35l41 2-0040: bitoffset= 4, word_offset=12, bit_sum mod 32=28
+[    1.618283] cs35l41 2-0040: bitoffset= 9, word_offset=12, bit_sum mod 32=1
+[    1.618915] cs35l41 2-0040: bitoffset= 14, word_offset=12, bit_sum mod 32=6
+[    1.619542] cs35l41 2-0040: bitoffset= 19, word_offset=12, bit_sum mod 32=11
+[    1.620174] cs35l41 2-0040: bitoffset= 24, word_offset=12, bit_sum mod 32=16
+[    1.620806] cs35l41 2-0040: bitoffset= 29, word_offset=12, bit_sum mod 32=21
+[    1.621437] cs35l41 2-0040: bitoffset= 2, word_offset=13, bit_sum mod 32=26
+[    1.622068] cs35l41 2-0040: bitoffset= 7, word_offset=13, bit_sum mod 32=31
+[    1.622699] cs35l41 2-0040: bitoffset= 12, word_offset=13, bit_sum mod 32=4
+[    1.623331] cs35l41 2-0040: bitoffset= 17, word_offset=13, bit_sum mod 32=9
+[    1.623972] cs35l41 2-0040: bitoffset= 22, word_offset=13, bit_sum mod 32=14
+[    1.624603] cs35l41 2-0040: bitoffset= 27, word_offset=13, bit_sum mod 32=19
+[    1.625235] cs35l41 2-0040: bitoffset= 0, word_offset=14, bit_sum mod 32=24
+[    1.625866] cs35l41 2-0040: bitoffset= 10, word_offset=14, bit_sum mod 32=2
+[    1.626493] cs35l41 2-0040: bitoffset= 20, word_offset=14, bit_sum mod 32=12
+[    1.627137] cs35l41 2-0040: bitoffset= 30, word_offset=14, bit_sum mod 32=22
+[    1.627768] cs35l41 2-0040: bitoffset= 8, word_offset=15, bit_sum mod 32=0
+[    1.628400] cs35l41 2-0040: bitoffset= 18, word_offset=15, bit_sum mod 32=10
+[    1.629031] cs35l41 2-0040: bitoffset= 28, word_offset=15, bit_sum mod 32=20
+[    1.629662] cs35l41 2-0040: bitoffset= 6, word_offset=16, bit_sum mod 32=30
+[    1.630301] cs35l41 2-0040: bitoffset= 16, word_offset=16, bit_sum mod 32=8
+[    1.630933] cs35l41 2-0040: bitoffset= 26, word_offset=16, bit_sum mod 32=18
+[    1.631564] cs35l41 2-0040: bitoffset= 4, word_offset=17, bit_sum mod 32=28
+[    1.632195] cs35l41 2-0040: bitoffset= 14, word_offset=17, bit_sum mod 32=6
+[    1.632820] cs35l41 2-0040: bitoffset= 24, word_offset=17, bit_sum mod 32=16
+[    1.633449] cs35l41 2-0040: bitoffset= 2, word_offset=18, bit_sum mod 32=26
+[    1.634078] cs35l41 2-0040: bitoffset= 12, word_offset=18, bit_sum mod 32=4
+[    1.634706] cs35l41 2-0040: bitoffset= 22, word_offset=18, bit_sum mod 32=14
+[    1.635330] cs35l41 2-0040: bitoffset= 0, word_offset=19, bit_sum mod 32=24
+[    1.635959] cs35l41 2-0040: bitoffset= 10, word_offset=19, bit_sum mod 32=2
+[    1.636289] [ds28e16] DS28E16_standard_cmd_flow: DS28E16_standard_cmd_flow: crc2 error!
+[    1.636398] [ds28e16] ds28el16_get_page_data_retry: read page data communication start... 2
+[    1.636399] [ds28e16] DS28E16_cmd_readMemory: DS28E16_cmd_readMemory write_buf:
+[    1.636400] [ds28e16] DS28E16_cmd_readMemory: 02 44 01
+[    1.636400] [ds28e16] DS28E16_standard_cmd_flow: DS28E16_standard_cmd_flow start
+[    1.636589] cs35l41 2-0040: bitoffset= 20, word_offset=19, bit_sum mod 32=12
+[    1.637218] cs35l41 2-0040: bitoffset= 30, word_offset=19, bit_sum mod 32=22
+[    1.637521] [ds28e16] DS28E16_standard_cmd_flow: DS28E16_standard_cmd_flow: crc error!
+[    1.637630] [ds28e16] ds28el16_get_page_data_retry: read page data communication start... 3
+[    1.637631] [ds28e16] DS28E16_cmd_readMemory: DS28E16_cmd_readMemory write_buf:
+[    1.637632] [ds28e16] DS28E16_cmd_readMemory: 02 44 01
+[    1.637632] [ds28e16] DS28E16_standard_cmd_flow: DS28E16_standard_cmd_flow start
+[    1.637843] cs35l41 2-0040: bitoffset= 8, word_offset=20, bit_sum mod 32=0
+[    1.638477] cs35l41 2-0040: bitoffset= 18, word_offset=20, bit_sum mod 32=10
+[    1.639107] cs35l41 2-0040: bitoffset= 28, word_offset=20, bit_sum mod 32=20
+[    1.639456] cs35l41 2-0040: bitoffset= 1, word_offset=21, bit_sum mod 32=25
+[    1.639804] cs35l41 2-0040: bitoffset= 6, word_offset=21, bit_sum mod 32=30
+[    1.640155] cs35l41 2-0040: bitoffset= 10, word_offset=21, bit_sum mod 32=2
+[    1.640503] cs35l41 2-0040: bitoffset= 14, word_offset=21, bit_sum mod 32=6
+[    1.641130] cs35l41 2-0040: bitoffset= 15, word_offset=21, bit_sum mod 32=7
+[    1.641757] cs35l41 2-0040: bitoffset= 22, word_offset=21, bit_sum mod 32=14
+[    1.642106] cs35l41 2-0040: bitoffset= 31, word_offset=21, bit_sum mod 32=23
+[    1.642455] cs35l41 2-0040: bitoffset= 0, word_offset=22, bit_sum mod 32=24
+[    1.642804] cs35l41 2-0040: bitoffset= 7, word_offset=22, bit_sum mod 32=31
+[    1.642807] cs35l41 2-0040: bitoffset= 8, word_offset=22, bit_sum mod 32=0
+[    1.643091] cs35l41 2-0040: bitoffset= 16, word_offset=22, bit_sum mod 32=8
+[    1.643374] cs35l41 2-0040: bitoffset= 24, word_offset=22, bit_sum mod 32=16
+[    1.643658] cs35l41 2-0040: bitoffset= 0, word_offset=23, bit_sum mod 32=24
+[    1.643941] cs35l41 2-0040: bitoffset= 8, word_offset=23, bit_sum mod 32=0
+[    1.658747] cs35l41 2-0040: Cirrus Logic CS35L41 (35a40), Revision: B2
+[    1.658829] cs35l41 2-0040: cs35l41 probe X
+[    1.658916] tfa98xx_i2c_init(): TFA98XX driver version v6.5.2_xxxxxxxxxx
+[    1.663448] msm-dai-q6-hdmi soc:qcom,msm-dai-q6-hdmi_ms: invalid device ID 24578
+[    1.663950] msm-auxpcm-dev soc:qcom,msm-sen-auxpcm: msm_auxpcm_dev_probe: invalid DT intf name senary
+[    1.676442] msm-dai-tdm soc:qcom,msm-dai-tdm-sen-rx: msm_dai_tdm_q6_probe: group id not supported 0x9150
+[    1.676451] msm-dai-tdm: probe of soc:qcom,msm-dai-tdm-sen-rx failed with error -22
+[    1.676471] msm-dai-tdm soc:qcom,msm-dai-tdm-sen-tx: msm_dai_tdm_q6_probe: group id not supported 0x9151
+[    1.676477] msm-dai-tdm: probe of soc:qcom,msm-dai-tdm-sen-tx failed with error -22
+[    1.682343] rmnet_perf_init(): initializing rmnet_perf
+[    1.682346] rmnet_perf_config_notify_cb(): rmnet_perf netdevice register, name = lo
+[    1.682347] rmnet_perf_config_notify_cb(): rmnet_perf netdevice register, name = bond0
+[    1.682349] rmnet_perf_config_notify_cb(): rmnet_perf netdevice register, name = dummy0
+[    1.682351] rmnet_shs_module_init(): Starting rmnet SHS module
+[    1.682388] GACT probability NOT on
+[    1.682392] Mirror/redirect action on
+[    1.682397] u32 classifier
+[    1.682398] Actions configured
+[    1.682404] Netfilter messages via NETLINK v0.30.
+[    1.682535] nf_conntrack version 0.5.0 (65536 buckets, 262144 max)
+[    1.682581] ctnetlink v0.93: registering with nfnetlink.
+[    1.682714] xt_time: kernel timezone is -0000
+[    1.682747] gre: GRE over IPv4 demultiplexor driver

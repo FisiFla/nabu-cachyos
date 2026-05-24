@@ -13,3 +13,8 @@ AGENTS.md
 CONTEXT.md
 docs/superpowers/
 .dual-graph/
+
+# Live crDroid reference: proprietary firmware blob (3.4MB), available via
+# postmarketOS panpanpanpan/nabu-firmware mirror or by re-pulling from
+# /vendor/firmware/CAMERA_ICP.elf on the running crDroid install.
+docs/crdroid-live/CAMERA_ICP.elf

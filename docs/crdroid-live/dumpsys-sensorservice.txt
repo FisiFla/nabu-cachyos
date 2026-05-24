@@ -1,0 +1,283 @@
+Captured at: 02:01:11.255
+Sensor Device:
+Total 49 h/w sensors, 49 running 0 disabled clients:
+0x0000000d) active-count = 1; sampling_period(ms) = {1.0}, selected = 1.00 ms; batching_period(ms) = {0.0}, selected = 0.00 ms
+Sensor List:
+0x00000001) step_detector  Wakeup     | XiaoMi          | ver: 1 | type: android.sensor.step_detector(18) | perm: android.permission.ACTIVITY_RECOGNITION | flags: 0x00000007
+	special-trigger | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 300) events | wakeUp | 
+0x00000002) step_detector  Non-wakeup | XiaoMi          | ver: 1 | type: android.sensor.step_detector(18) | perm: android.permission.ACTIVITY_RECOGNITION | flags: 0x00000006
+	special-trigger | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 300) events | non-wakeUp | 
+0x00000003) pedometer  Wakeup         | qualcomm        | ver: 1 | type: android.sensor.step_counter(19) | perm: android.permission.ACTIVITY_RECOGNITION | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 300) events | wakeUp | 
+0x00000004) pedometer  Non-wakeup     | qualcomm        | ver: 1 | type: android.sensor.step_counter(19) | perm: android.permission.ACTIVITY_RECOGNITION | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 300) events | non-wakeUp | 
+0x00000005) stationary_detect_wakeup  | qualcomm        | ver: 1 | type: android.sensor.stationary_detect(29) | perm: n/a | flags: 0x00000005
+	one-shot | maxDelay=0us | minDelay=-1us | no batching | wakeUp | 
+0x00000006) stationary_detect         | qualcomm        | ver: 1 | type: android.sensor.stationary_detect(29) | perm: n/a | flags: 0x00000004
+	one-shot | maxDelay=0us | minDelay=-1us | no batching | non-wakeUp | 
+0x00000007) sns_smd  Wakeup           | qualcomm        | ver: 1 | type: android.sensor.significant_motion(17) | perm: n/a | flags: 0x00000005
+	one-shot | maxDelay=0us | minDelay=-1us | no batching | wakeUp | 
+0x00000008) lsm6dso Accelerometer-Uncalibrated Non-wakeup | STMicro         | ver: 142854 | type: android.sensor.accelerometer_uncalibrated(35) | perm: n/a | flags: 0x00000000
+	continuous | minRate=5.00Hz | maxRate=415.97Hz | FIFO (max,reserved) = (10000, 3000) events | non-wakeUp | 
+0x00000009) rotation vector  Non-wakeup | xiaomi          | ver: 1 | type: android.sensor.rotation_vector(11) | perm: n/a | flags: 0x00000000
+	continuous | minRate=1.00Hz | maxRate=200.00Hz | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x0000000a) orientation  Non-wakeup   | xiaomi          | ver: 1 | type: android.sensor.orientation(3) | perm: n/a | flags: 0x00000000
+	continuous | minRate=1.00Hz | maxRate=200.00Hz | FIFO (max,reserved) = (10000, 300) events | non-wakeUp | 
+0x0000000b) NonUi  Wakeup             | XiaoMi          | ver: 1 | type:  xiaomi.sensor.nonui(33171027) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x0000000c) NonUi  Non-wakeup         | XiaoMi          | ver: 1 | type:  xiaomi.sensor.nonui(33171027) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x0000000d) pickup  Wakeup            | XiaoMi          | ver: 1 | type: android.sensor.pick_up_gesture(25) | perm: n/a | flags: 0x00000005
+	one-shot | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x0000000f) oem13_light_smd  Wakeup   | XiaoMi          | ver: 1 | type:  xiaomi.sensor.oem13(33171039) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x00000010) oem13_light_smd  Non-wakeup | XiaoMi          | ver: 1 | type:  xiaomi.sensor.oem13(33171039) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000011) 3d_signature  Wakeup      | XiaoMi          | ver: 1 | type: xiaomi.sensor.3d_signature(33171032) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x00000012) 3d_signature  Non-wakeup  | XiaoMi          | ver: 1 | type: xiaomi.sensor.3d_signature(33171032) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000013) motion_detect_wakeup      | qualcomm        | ver: 1 | type: android.sensor.motion_detect(30) | perm: n/a | flags: 0x00000005
+	one-shot | maxDelay=0us | minDelay=-1us | no batching | wakeUp | 
+0x00000014) motion_detect             | qualcomm        | ver: 1 | type: android.sensor.motion_detect(30) | perm: n/a | flags: 0x00000004
+	one-shot | maxDelay=0us | minDelay=-1us | no batching | non-wakeUp | 
+0x00000015) tcs3701  Non-wakeup       | ams AG          | ver: 256 | type: xiaomi.sensor.ambientlight.factory(33171007) | perm: n/a | flags: 0x00000000
+	continuous | minRate=1.00Hz | maxRate=2000.00Hz | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000016) ak0991x Magnetometer-Uncalibrated Non-wakeup | akm             | ver: 20037 | type: android.sensor.magnetic_field_uncalibrated(14) | perm: n/a | flags: 0x00000000
+	continuous | minRate=1.00Hz | maxRate=100.00Hz | FIFO (max,reserved) = (10000, 600) events | non-wakeUp | 
+0x00000017) ak0991x Magnetometer Non-wakeup | akm             | ver: 20037 | type: android.sensor.magnetic_field(2) | perm: n/a | flags: 0x00000000
+	continuous | minRate=1.00Hz | maxRate=100.00Hz | FIFO (max,reserved) = (10000, 600) events | non-wakeUp | 
+0x00000018) sar_detector_1  Wakeup    | xiaomi          | ver: 1 | type: xiaomi.sensor.sar_algo_1(33171059) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x00000019) sar_detector_1  Non-wakeup | xiaomi          | ver: 1 | type: xiaomi.sensor.sar_algo_1(33171059) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x0000001a) linear_acceleration       | qualcomm        | ver: 1 | type: android.sensor.linear_acceleration(10) | perm: n/a | flags: 0x00000000
+	continuous | minRate=5.00Hz | maxRate=200.00Hz | FIFO (max,reserved) = (10000, 300) events | non-wakeUp | 
+0x0000001b) gravity  Non-wakeup       | qualcomm        | ver: 1 | type: android.sensor.gravity(9) | perm: n/a | flags: 0x00000000
+	continuous | minRate=5.00Hz | maxRate=200.00Hz | FIFO (max,reserved) = (10000, 300) events | non-wakeUp | 
+0x0000001c) Game Rotation Vector  Non-wakeup | qualcomm        | ver: 1 | type: android.sensor.game_rotation_vector(15) | perm: n/a | flags: 0x00000000
+	continuous | minRate=5.00Hz | maxRate=200.00Hz | FIFO (max,reserved) = (10000, 300) events | non-wakeUp | 
+0x0000001d) tcs3701 Ambient Light Sensor Wakeup | ams AG          | ver: 256 | type: android.sensor.light(5) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x0000001e) tcs3701 Ambient Light Sensor Non-wakeup | ams AG          | ver: 256 | type: android.sensor.light(5) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x0000001f) tcs3701 front CCT  Wakeup | ams AG          | ver: 256 | type: xiaomi.sensor.front_cct(33171088) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x00000020) tcs3701 front CCT  Non-wakeup | ams AG          | ver: 256 | type: xiaomi.sensor.front_cct(33171088) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000021) tcs3701 front CCT stream  Non-wakeup | ams AG          | ver: 256 | type: xiaomi.sensor.front_cct_strm(33171089) | perm: n/a | flags: 0x00000000
+	continuous | minRate=1.00Hz | maxRate=2000.00Hz | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000022) sns_geomag_rv  Non-wakeup | qualcomm        | ver: 1 | type: android.sensor.geomagnetic_rotation_vector(20) | perm: n/a | flags: 0x00000000
+	continuous | minRate=5.00Hz | maxRate=100.00Hz | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000023) rohm_bu27030_back  Non-wakeup | Rohm            | ver: 65536 | type: xiaomi.sensor.back_lux_strm(33171057) | perm: n/a | flags: 0x00000000
+	continuous | minRate=10.00Hz | maxRate=20.00Hz | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000024) lsm6dso Gyroscope Non-wakeup | STMicro         | ver: 142854 | type: android.sensor.gyroscope(4) | perm: n/a | flags: 0x00000040
+	continuous | minRate=5.00Hz | maxRate=415.97Hz | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | has-additional-info, 
+0x00000025) Aod  Wakeup               | XiaoMi          | ver: 1 | type:    xiaomi.sensor.aod(33171029) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x00000026) Aod  Non-wakeup           | XiaoMi          | ver: 1 | type:    xiaomi.sensor.aod(33171029) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000027) device_orient  Wakeup     | xiaomi          | ver: 1 | type: android.sensor.device_orientation(27) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x00000028) device_orient  Non-wakeup | xiaomi          | ver: 1 | type: android.sensor.device_orientation(27) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000029) rohm_bu27030_back  Wakeup | Rohm            | ver: 65536 | type: xiaomi.sensor.back_lux(33171055) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x0000002a) rohm_bu27030_back  Non-wakeup | Rohm            | ver: 65536 | type: xiaomi.sensor.back_lux(33171055) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x0000002b) ccd_tilt  Wakeup          | qualcomm        | ver: 256 | type: android.sensor.tilt_detector(22) | perm: n/a | flags: 0x00000007
+	special-trigger | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x0000002c) SAR ADUX1050  Wakeup      | analog_devices_inc | ver: 256 | type:    xiaomi.sensor.sar(33171015) | perm: n/a | flags: 0x00000003
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x0000002d) SAR ADUX1050  Non-wakeup  | analog_devices_inc | ver: 256 | type:    xiaomi.sensor.sar(33171015) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x0000002e) screen_down  Wakeup       | XiaoMi(V3.6.2)  | ver: 1 | type: xiaomi.sensor.screen_down(33171037) | perm: n/a | flags: 0x00000007
+	special-trigger | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | wakeUp | 
+0x0000002f) screen_down  Non-wakeup   | XiaoMi(V3.6.2)  | ver: 1 | type: xiaomi.sensor.screen_down(33171037) | perm: n/a | flags: 0x00000006
+	special-trigger | maxDelay=0us | minDelay=0us | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | 
+0x00000030) lsm6dso Gyroscope-Uncalibrated Non-wakeup | STMicro         | ver: 142854 | type: android.sensor.gyroscope_uncalibrated(16) | perm: n/a | flags: 0x00000040
+	continuous | minRate=5.00Hz | maxRate=415.97Hz | FIFO (max,reserved) = (10000, 0) events | non-wakeUp | has-additional-info, 
+0x00000031) lsm6dso Accelerometer Non-wakeup | STMicro         | ver: 142854 | type: android.sensor.accelerometer(1) | perm: n/a | flags: 0x00000000
+	continuous | minRate=5.00Hz | maxRate=415.97Hz | FIFO (max,reserved) = (10000, 3000) events | non-wakeUp | 
+0x00000032) Touch Sensor              | xiaomi          | ver: 1 | type:     qti.sensor.touch(33171031) | perm: n/a | flags: 0x00000002
+	on-change | minRate=1000.00Hz | minDelay=0us | no batching | non-wakeUp | 
+0x5f636779) Corrected Gyroscope Sensor | AOSP            | ver: 1 | type: android.sensor.gyroscope(4) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+0x5f676172) Game Rotation Vector Sensor | AOSP            | ver: 3 | type: android.sensor.game_rotation_vector(15) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+0x5f676273) Gyroscope Bias (debug)    | AOSP            | ver: 1 | type: android.sensor.accelerometer(1) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+0x5f67656f) GeoMag Rotation Vector Sensor | AOSP            | ver: 3 | type: android.sensor.geomagnetic_rotation_vector(20) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+0x5f677276) Gravity Sensor            | AOSP            | ver: 3 | type: android.sensor.gravity(9) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+0x5f6c696e) Linear Acceleration Sensor | AOSP            | ver: 3 | type: android.sensor.linear_acceleration(10) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+0x5f726f76) Rotation Vector Sensor    | AOSP            | ver: 3 | type: android.sensor.rotation_vector(11) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+0x5f797072) Orientation Sensor        | AOSP            | ver: 1 | type: android.sensor.orientation(3) | perm: n/a | flags: 0x00000000
+	continuous | maxDelay=0us | maxRate=415.97Hz | no batching | non-wakeUp | 
+Fusion States:
+9-axis fusion disabled (0 clients), gyro-rate= 200.00Hz, q=< 0, 0, 0, 0 > (0), b=< 0, 0, 0 >
+game fusion(no mag) disabled (0 clients), gyro-rate= 200.00Hz, q=< 0, 0, 0, 0 > (0), b=< 0, 0, 0 >
+geomag fusion (no gyro) disabled (0 clients), gyro-rate= 200.00Hz, q=< 0, 0, 0, 0 > (0), b=< 0, 0, 0 >
+Recent Sensor events:
+lsm6dso Accelerometer Non-wakeup: last 50 events
+	 1 (ts=1327.687386385, wall=01:59:39.530) -0.14, 0.52, 9.85, 
+	 2 (ts=1327.887397791, wall=01:59:39.530) -0.14, 0.52, 9.85, 
+	 3 (ts=1328.087415603, wall=01:59:39.530) -0.14, 0.52, 9.84, 
+	 4 (ts=1328.287442322, wall=01:59:39.530) -0.14, 0.52, 9.84, 
+	 5 (ts=1328.487469145, wall=01:59:39.530) -0.14, 0.52, 9.85, 
+	 6 (ts=1328.687499093, wall=01:59:39.530) -0.14, 0.52, 9.85, 
+	 7 (ts=1328.887537895, wall=01:59:39.530) -0.14, 0.52, 9.84, 
+	 8 (ts=1329.087585135, wall=01:59:39.530) -0.14, 0.52, 9.85, 
+	 9 (ts=1329.287615135, wall=01:59:39.530) -0.14, 0.52, 9.85, 
+	10 (ts=1329.487653780, wall=01:59:39.530) -0.15, 0.52, 9.85, 
+	11 (ts=1329.687685551, wall=01:59:41.527) -0.14, 0.52, 9.84, 
+	12 (ts=1329.887711593, wall=01:59:41.527) -0.14, 0.52, 9.84, 
+	13 (ts=1330.087745708, wall=01:59:41.527) -0.14, 0.52, 9.84, 
+	14 (ts=1330.287760708, wall=01:59:41.527) -0.14, 0.52, 9.85, 
+	15 (ts=1330.487786749, wall=01:59:41.527) -0.14, 0.52, 9.85, 
+	16 (ts=1330.687808312, wall=01:59:41.527) -0.14, 0.52, 9.84, 
+	17 (ts=1330.887825916, wall=01:59:41.527) -0.14, 0.52, 9.85, 
+	18 (ts=1331.087847843, wall=01:59:41.527) -0.15, 0.52, 9.85, 
+	19 (ts=1331.287886228, wall=01:59:41.527) -0.14, 0.52, 9.85, 
+	20 (ts=1331.487909978, wall=01:59:41.527) -0.14, 0.52, 9.85, 
+	21 (ts=1331.687947218, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	22 (ts=1331.887965603, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	23 (ts=1332.087998624, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	24 (ts=1332.288016124, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	25 (ts=1332.488049718, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	26 (ts=1332.688066905, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	27 (ts=1332.888079041, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	28 (ts=1333.088092426, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	29 (ts=1333.288103416, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	30 (ts=1333.488118989, wall=01:59:43.527) -0.14, 0.52, 9.85, 
+	31 (ts=1333.688147322, wall=01:59:45.530) -0.14, 0.52, 9.84, 
+	32 (ts=1333.888170916, wall=01:59:45.530) -0.14, 0.52, 9.84, 
+	33 (ts=1334.088213260, wall=01:59:45.530) -0.14, 0.52, 9.85, 
+	34 (ts=1334.288241124, wall=01:59:45.530) -0.14, 0.52, 9.85, 
+	35 (ts=1334.488275187, wall=01:59:45.530) -0.14, 0.52, 9.84, 
+	36 (ts=1334.688317843, wall=01:59:45.530) -0.14, 0.52, 9.85, 
+	37 (ts=1334.888358624, wall=01:59:45.530) -0.14, 0.52, 9.85, 
+	38 (ts=1335.088389978, wall=01:59:45.530) -0.14, 0.52, 9.85, 
+	39 (ts=1335.288431228, wall=01:59:45.530) -0.14, 0.52, 9.85, 
+	40 (ts=1335.488457999, wall=01:59:45.530) -0.14, 0.52, 9.85, 
+	41 (ts=1335.688486072, wall=01:59:47.293) -0.14, 0.52, 9.85, 
+	42 (ts=1335.888507114, wall=01:59:47.293) -0.14, 0.52, 9.84, 
+	43 (ts=1336.088536958, wall=01:59:47.293) -0.14, 0.52, 9.85, 
+	44 (ts=1336.288570239, wall=01:59:47.293) -0.14, 0.52, 9.84, 
+	45 (ts=1336.488614145, wall=01:59:47.293) -0.14, 0.52, 9.85, 
+	46 (ts=1336.688652895, wall=01:59:47.293) -0.14, 0.52, 9.85, 
+	47 (ts=1336.888695916, wall=01:59:47.293) -0.14, 0.52, 9.84, 
+	48 (ts=1337.088746697, wall=01:59:47.293) -0.14, 0.52, 9.85, 
+	49 (ts=1337.288793728, wall=01:59:47.315) -0.14, 0.52, 9.85, 
+	50 (ts=1337.488834093, wall=01:59:47.519) -0.14, 0.52, 9.85, 
+device_orient  Wakeup: last 7 events
+	 1 (ts=16.301455479, wall=01:37:46.254) 0.00, 
+	 2 (ts=16.423989489, wall=01:37:46.373) 0.00, 
+	 3 (ts=21.175256833, wall=01:37:51.100) 0.00, 
+	 4 (ts=136.077800128, wall=01:39:46.451) 0.00, 
+	 5 (ts=142.646125753, wall=01:39:52.574) 0.00, 
+	 6 (ts=144.929084034, wall=01:39:54.857) 0.00, 
+	 7 (ts=456.066997244, wall=01:45:05.991) 0.00, 
+tcs3701 Ambient Light Sensor Wakeup: last 50 events
+	 1 (ts=165.624899659, wall=01:40:15.523) 85.60, 0.00, 0.00, 
+	 2 (ts=165.824899867, wall=01:40:15.721) 76.10, 0.00, 0.00, 
+	 3 (ts=166.224884346, wall=01:40:16.123) 89.00, 0.00, 0.00, 
+	 4 (ts=166.624899867, wall=01:40:16.523) 101.50, 0.00, 0.00, 
+	 5 (ts=169.825059086, wall=01:40:19.722) 113.20, 0.00, 0.00, 
+	 6 (ts=173.825052315, wall=01:40:23.721) 97.60, 0.00, 0.00, 
+	 7 (ts=174.225054971, wall=01:40:24.121) 80.60, 0.00, 0.00, 
+	 8 (ts=174.425053617, wall=01:40:24.322) 68.30, 0.00, 0.00, 
+	 9 (ts=174.625055909, wall=01:40:24.522) 88.60, 0.00, 0.00, 
+	10 (ts=174.825056534, wall=01:40:24.722) 78.40, 0.00, 0.00, 
+	11 (ts=175.025061846, wall=01:40:24.921) 105.20, 0.00, 0.00, 
+	12 (ts=175.225053930, wall=01:40:25.122) 129.80, 0.00, 0.00, 
+	13 (ts=175.425054971, wall=01:40:25.322) 153.10, 0.00, 0.00, 
+	14 (ts=175.625057888, wall=01:40:25.522) 178.90, 0.00, 0.00, 
+	15 (ts=175.825052263, wall=01:40:25.722) 204.00, 0.00, 0.00, 
+	16 (ts=176.225056326, wall=01:40:26.121) 270.70, 0.00, 0.00, 
+	17 (ts=177.225060596, wall=01:40:27.122) 319.50, 0.00, 0.00, 
+	18 (ts=177.724899867, wall=01:40:27.621) 389.60, 0.00, 0.00, 
+	19 (ts=178.124899607, wall=01:40:28.021) 351.40, 0.00, 0.00, 
+	20 (ts=449.765926463, wall=01:44:59.662) 97.90, 0.00, 0.00, 
+	21 (ts=449.965928026, wall=01:44:59.862) 123.10, 0.00, 0.00, 
+	22 (ts=450.165931411, wall=01:45:00.063) 106.10, 0.00, 0.00, 
+	23 (ts=450.565933755, wall=01:45:00.462) 215.40, 0.00, 0.00, 
+	24 (ts=450.765931619, wall=01:45:00.662) 270.20, 0.00, 0.00, 
+	25 (ts=451.165925838, wall=01:45:01.064) 101.80, 0.00, 0.00, 
+	26 (ts=451.665945630, wall=01:45:01.566) 48.10, 0.00, 0.00, 
+	27 (ts=451.865932453, wall=01:45:01.764) 35.90, 0.00, 0.00, 
+	28 (ts=452.065925942, wall=01:45:01.962) 40.20, 0.00, 0.00, 
+	29 (ts=452.265931411, wall=01:45:02.163) 59.90, 0.00, 0.00, 
+	30 (ts=452.665935526, wall=01:45:02.565) 101.60, 0.00, 0.00, 
+	31 (ts=453.165947296, wall=01:45:03.062) 88.40, 0.00, 0.00, 
+	32 (ts=453.565933182, wall=01:45:03.462) 117.30, 0.00, 0.00, 
+	33 (ts=453.765933026, wall=01:45:03.666) 137.00, 0.00, 0.00, 
+	34 (ts=453.965925734, wall=01:45:03.864) 205.40, 0.00, 0.00, 
+	35 (ts=454.165929276, wall=01:45:04.064) 166.50, 0.00, 0.00, 
+	36 (ts=454.565934380, wall=01:45:04.466) 204.80, 0.00, 0.00, 
+	37 (ts=454.765928442, wall=01:45:04.663) 250.40, 0.00, 0.00, 
+	38 (ts=455.465934588, wall=01:45:05.365) 135.90, 0.00, 0.00, 
+	39 (ts=455.965930005, wall=01:45:05.863) 0.90, 0.00, 0.00, 
+	40 (ts=456.165933234, wall=01:45:06.064) 4.50, 0.00, 0.00, 
+	41 (ts=456.365928599, wall=01:45:06.262) 10.50, 0.00, 0.00, 
+	42 (ts=456.565931776, wall=01:45:06.462) 63.70, 0.00, 0.00, 
+	43 (ts=456.765925994, wall=01:45:06.662) 117.70, 0.00, 0.00, 
+	44 (ts=457.265932765, wall=01:45:07.163) 207.30, 0.00, 0.00, 
+	45 (ts=457.465934119, wall=01:45:07.362) 153.50, 0.00, 0.00, 
+	46 (ts=457.665926307, wall=01:45:07.563) 102.40, 0.00, 0.00, 
+	47 (ts=457.865927974, wall=01:45:07.764) 238.20, 0.00, 0.00, 
+	48 (ts=458.365926515, wall=01:45:08.264) 338.60, 0.00, 0.00, 
+	49 (ts=1306.192259926, wall=01:59:16.088) 105.30, 0.00, 0.00, 
+	50 (ts=1307.192260395, wall=01:59:17.088) 339.10, 0.00, 0.00, 
+pickup  Wakeup: last 1 events
+	 1 (ts=135.626975649, wall=01:39:45.566) 1.00, 
+Active sensors:
+pickup  Wakeup (handle=0x0000000d, connections=1)
+Socket Buffer size = 984 events
+WakeLock Status: not held 
+Mode : NORMAL
+Sensor Privacy: disabled
+1 open event connections
+Connection Number: 0 
+	Operating Mode: NORMAL
+	 com.android.systemui.doze.DozeSensors$TriggerSensor | WakeLockRefCount 0 | uid 10273 | cache size 0 | max cache size 0 | has sensor access: true
+	 pickup  Wakeup 0x0000000d | first flush pending: false | pending flush events 0 
+0 open direct connections
+Previous Registrations:
+01:59:47 - 0x00000031 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)
+01:59:47 + 0x0000000d pid= 2135 uid=10273 samplingPeriod=       0us batchingPeriod=       0us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:59:47 - 0x0000001d pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:59:47 - 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:59:15 - 0x0000000d pid= 2135 uid=10273 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:59:15 + 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   66667us batchingPeriod=       0us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:59:15 + 0x00000031 pid= 1811 uid= 1000 samplingPeriod=  200000us batchingPeriod= 2000000us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)
+01:59:15 + 0x0000001d pid= 1811 uid= 1000 samplingPeriod=  250000us batchingPeriod=       0us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:45:16 - 0x00000031 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)
+01:45:16 + 0x0000000d pid= 2135 uid=10273 samplingPeriod=       0us batchingPeriod=       0us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:45:15 - 0x0000001d pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:45:15 - 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:44:59 - 0x0000000d pid= 2135 uid=10273 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:44:59 + 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   66667us batchingPeriod=       0us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:44:59 + 0x00000031 pid= 1811 uid= 1000 samplingPeriod=  200000us batchingPeriod= 2000000us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)
+01:44:59 + 0x0000001d pid= 1811 uid= 1000 samplingPeriod=  250000us batchingPeriod=       0us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:41:22 - 0x00000031 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)
+01:41:22 + 0x0000000d pid= 2135 uid=10273 samplingPeriod=       0us batchingPeriod=       0us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:41:22 - 0x0000001d pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:41:22 - 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:39:45 - 0x0000000d pid= 2135 uid=10273 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:39:45 + 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   66667us batchingPeriod=       0us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:39:45 + 0x00000031 pid= 1811 uid= 1000 samplingPeriod=  200000us batchingPeriod= 2000000us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)
+01:39:45 + 0x0000000d pid= 2135 uid=10273 samplingPeriod=       0us batchingPeriod=       0us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:39:45 + 0x0000001d pid= 1811 uid= 1000 samplingPeriod=  250000us batchingPeriod=       0us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:38:58 - 0x00000031 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)
+01:38:58 + 0x0000000d pid= 2135 uid=10273 samplingPeriod=       0us batchingPeriod=       0us result=OK (sensor, package): (pickup  Wakeup             , com.android.systemui.doze.DozeSensors$TriggerSensor)
+01:38:58 - 0x0000001d pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.BrightnessTracker$SensorListener)
+01:38:58 - 0x0000001d pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:38:58 - 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   N/A  us batchingPeriod=   N/A  us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:37:55 + 0x0000001d pid= 1811 uid= 1000 samplingPeriod=  250000us batchingPeriod=       0us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.AutomaticBrightnessController$2)
+01:37:45 + 0x00000027 pid= 1811 uid= 1000 samplingPeriod=   66667us batchingPeriod=       0us result=OK (sensor, package): (device_orient  Wakeup      , com.android.server.wm.WindowOrientationListener$OrientationSensorJudge)
+01:37:44 + 0x0000001d pid= 1811 uid= 1000 samplingPeriod=  200000us batchingPeriod=       0us result=OK (sensor, package): (tcs3701 Ambient Light Sensor Wakeup, com.android.server.display.BrightnessTracker$SensorListener)
+01:37:44 + 0x00000031 pid= 1811 uid= 1000 samplingPeriod=  200000us batchingPeriod= 2000000us result=OK (sensor, package): (lsm6dso Accelerometer Non-wakeup, com.android.server.power.FaceDownDetector)

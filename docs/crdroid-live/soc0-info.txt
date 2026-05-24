@@ -1,0 +1,31 @@
+accessory_chip: 0
+build_id: 
+chip_family: 0x56
+chip_name: SDM855
+family: Snapdragon
+foundry_id: 1
+hw_platform: NABU
+image_crm_version: REL
+image_variant: nabu_global-user
+image_version: 10:BP4A.251205.006:87
+images: 0:
+machine: SM8150
+ncluster_array_offset: 0xb0
+ndefective_parts_array_offset: 0xb4
+nmodem_supported: 0xff
+nproduct_id: 0x404
+num_clusters: 0x1
+num_defective_parts: 0xc
+platform_subtype: Unknown
+platform_subtype_id: 0
+platform_version: 1638400
+pmic_die_revision: 196608
+pmic_model: 65566
+power: raw_device_family: 0x6
+raw_device_number: 0x3
+raw_id: 165
+raw_version: 3
+revision: 2.2
+select_image: 10
+serial_number: soc_id: 339
+subsystem: uevent: vendor: Qualcomm

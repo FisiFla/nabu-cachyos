@@ -1,0 +1,5 @@
+ls: /sys/module/adsprpc/parameters/: No such file or directory
+--- /sys/class/adsprpc ---
+ls: /sys/class/adsprpc: No such file or directory
+--- /sys/class/qcom/ ---
+ls: /sys/class/qcom: No such file or directory

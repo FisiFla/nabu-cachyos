@@ -396,10 +396,14 @@ ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-adsp -d adsp -s -R ${NABU_HEXAGON
 CONFEOF
 
 mkdir -p "${ROOTFS}/etc/systemd/system/hexagonrpcd-sdsp.service.d"
+# NAS-247: use -S sensorspd (INIT_CREATE_STATIC, our patched -S option) NOT
+# -s (INIT_ATTACH_SNS). On nabu's SLPI the sensorspd PD doesn't pre-exist;
+# we need to CREATE it, not attach to an existing one. The patch lives at
+# tools/hexagonrpc-add-create-static.patch and is applied by build-qualcomm.sh.
 cat > "${ROOTFS}/etc/systemd/system/hexagonrpcd-sdsp.service.d/nabu-path.conf" << CONFEOF
 [Service]
 ExecStart=
-ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -s -R ${NABU_HEXAGONFS}
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -S sensorspd -R ${NABU_HEXAGONFS}
 CONFEOF
 
 # NAS-218: enable the SDSP unit specifically (in addition to the adsp ones

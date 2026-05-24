@@ -406,16 +406,10 @@ ExecStart=
 ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -S sensorspd -R ${NABU_HEXAGONFS}
 CONFEOF
 
-# NAS-218: enable the SDSP unit specifically (in addition to the adsp ones
-# enabled below). The upstream ConditionPathExists gates each unit on the
-# corresponding /dev/fastrpc-* device, so a missing FastRPC channel just
-# skips that unit — safe to enable all three.
-arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-sdsp.service 2>/dev/null || true
-
-# Order iio-sensor-proxy AFTER hexagonrpcd-adsp-sensorspd so SLPI's Sensor
-# Manager is reachable on QRTR before iio-sensor-proxy probes for sensors.
-# Without this drop-in iio-sensor-proxy races, finds nothing, prints
-# "No sensors or missing kernel drivers" and exits — leaving auto-rotate dead.
+# iio-sensor-proxy comes from a package (already installed by pacstrap), so we
+# can enable it now. The drop-in below orders it AFTER hexagonrpcd-adsp-sensorspd
+# so libssc can find Sensor Manager on QRTR before iio-sensor-proxy probes —
+# without the drop-in iio-sensor-proxy races, finds no sensors, and exits.
 mkdir -p "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d"
 cat > "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d/wait-for-slpi.conf" << 'IIOEOF'
 [Unit]
@@ -423,9 +417,12 @@ After=hexagonrpcd-adsp-sensorspd.service
 Wants=hexagonrpcd-adsp-sensorspd.service
 IIOEOF
 
-arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-rootpd.service 2>/dev/null || true
-arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-sensorspd.service 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl enable iio-sensor-proxy.service 2>/dev/null || true
+
+# NOTE: hexagonrpcd-* services are NOT enabled here. Their unit files are
+# installed by build-qualcomm.sh which runs further down (~line 514). Enabling
+# them now would silently no-op (unit not found). The actual enable happens
+# after build-qualcomm.sh — see the block right after that call.
 # Disable heavy/unnecessary services for tablet use
 arch-chroot "${ROOTFS}" systemctl disable man-db.timer 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl mask ldconfig.service 2>/dev/null || true
@@ -512,6 +509,14 @@ NMSDEOF
 # qrtr-ns, rmtfs, tqftpserv — required for WiFi on Snapdragon mainline Linux
 echo "Building Qualcomm userspace services from source..."
 bash "${SCRIPT_DIR}/build-qualcomm.sh" "${ROOTFS}"
+
+# NAS-218: enable hexagonrpcd units NOW (they were just installed by
+# build-qualcomm.sh stage 6). Enabling them earlier silently no-op'd because
+# the unit files didn't exist yet. All three are enabled; ConditionPathExists
+# in the upstream units gates them on /dev/fastrpc-* presence at runtime.
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-rootpd.service 2>/dev/null || true
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-sensorspd.service 2>/dev/null || true
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-sdsp.service 2>/dev/null || true
 
 # Create systemd services for Qualcomm daemons
 # NOTE: qrtr-ns is NOT needed — kernel 6.14 has in-kernel QRTR name service.

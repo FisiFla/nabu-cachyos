@@ -86,12 +86,23 @@ fi
 
 # Apply optional device tree modifications.
 # nabu's TrustZone firmware reserves GPIO 126-127; changing that range
-# is known to cause boot failure, so keep the sensor DTS hack opt-in.
+# is known to cause boot failure, so keep the direct-I2C sensor DTS hack
+# opt-in. The SLPI path below bypasses this entirely — sensors are driven
+# by the SLPI co-processor over QRTR, not by the AP's I2C controller.
 if [ "${ENABLE_EXPERIMENTAL_SENSORS}" = "1" ] && [ -x "${SCRIPT_DIR}/add-sensors.sh" ]; then
     echo "Adding experimental sensor support to device tree..."
     bash "${SCRIPT_DIR}/add-sensors.sh"
 else
     echo "Skipping experimental sensor DTS modifications."
+fi
+
+# NAS-218: enable the Sensor Low-Power Island remoteproc. Mandatory now —
+# this is the route to ALL nabu sensors (accel/gyro/mag/light/prox) via
+# the Qualcomm Sensor Manager running on SLPI. See enable-slpi.sh comments
+# for context.
+if [ -x "${SCRIPT_DIR}/enable-slpi.sh" ]; then
+    echo "Enabling SLPI remoteproc in device tree..."
+    bash "${SCRIPT_DIR}/enable-slpi.sh"
 fi
 
 # Build config: defconfig + sm8150 fragment + cachyos fragment

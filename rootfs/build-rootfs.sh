@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOTFS="/tmp/rootfs-build"
 KERNEL_DIR="/build/output/kernel"
 FIRMWARE_DIR="/build/output/firmware/nabu-firmware"
+SLPI_BUNDLE_DIR="/build/output/firmware/slpi-bundle"
 
 echo "--- Building rootfs ---"
 
@@ -69,6 +70,29 @@ for fw in modem.mbn adsp.mbn cdsp.mbn venus.mbn modemuw.jsn wlanmdsp.mbn a640_za
     cp -f "${FIRMWARE_DIR}/${fw}" "${ROOTFS}/usr/lib/firmware/qcom/sm8150/xiaomi/nabu/" 2>/dev/null || true
 done
 
+# NAS-218: SLPI firmware (loaded by remoteproc once enable-slpi.sh has flipped
+# the DT node to status="okay"). Comes from postmarketOS bundle, not map220v.
+if [ -f "${SLPI_BUNDLE_DIR}/slpi_nb.mbn" ]; then
+    cp -f "${SLPI_BUNDLE_DIR}/slpi_nb.mbn" \
+        "${ROOTFS}/usr/lib/firmware/qcom/sm8150/xiaomi/nabu/slpi_nb.mbn"
+    echo "  Installed slpi_nb.mbn (Sensor Low-Power Island firmware)"
+else
+    echo "WARNING: ${SLPI_BUNDLE_DIR}/slpi_nb.mbn missing — sensors will not work."
+fi
+
+# NAS-218: Hexagonfs config tree the SLPI firmware fetches via FastRPC reverse
+# tunnel. Path layout matches postmarketOS convention
+# (`/usr/share/qcom/<soc>/<vendor>/<device>/`) — hexagonrpcd is invoked with
+# `-R /usr/share/qcom/sm8150/xiaomi/nabu` by a drop-in below. Tree includes
+# sensor-config JSONs for LSM6DSO accel/gyro, AK991x magnetometer, BU27030
+# ambient light, ADUX1050 proximity, TCS3701 RGB+IR, and 20+ virtual sensors
+# (orient/tilt/AOD/etc.).
+if [ -d "${SLPI_BUNDLE_DIR}/hexagonfs" ]; then
+    mkdir -p "${ROOTFS}/usr/share/qcom/sm8150/xiaomi/nabu"
+    cp -a "${SLPI_BUNDLE_DIR}/hexagonfs/." "${ROOTFS}/usr/share/qcom/sm8150/xiaomi/nabu/"
+    echo "  Installed hexagonfs tree ($(find "${SLPI_BUNDLE_DIR}/hexagonfs" -type f | wc -l | tr -d ' ') files)"
+fi
+
 # Generic GPU firmware paths used by drm/msm and Mesa
 mkdir -p "${ROOTFS}/usr/lib/firmware/qcom"
 for fw in a630_sqe.fw a640_gmu.bin a640_zap.mbn; do
@@ -86,6 +110,13 @@ ln -sf ../novatek_nt36523_fw.bin \
 # Audio codec firmware: cs35l41 files need to be under cirrus/
 mkdir -p "${ROOTFS}/usr/lib/firmware/cirrus"
 cp -f "${FIRMWARE_DIR}"/*cs35l41* "${ROOTFS}/usr/lib/firmware/cirrus/" 2>/dev/null || true
+
+# Mountpoint for the device's factory persist partition (NAS-218 auto-rotation).
+# The actual mount is in /etc/fstab below; this just creates the empty target so
+# fstab's nofail can find it. Without /persist/sensors/registry/sns.reg the
+# ADSP SSC firmware has no calibration data for the LSM6DSO and iio-sensor-proxy
+# stays silent — auto-rotate fails closed without affecting anything else.
+mkdir -p "${ROOTFS}/persist"
 
 # 4. Copy overlay configs
 echo "Applying overlay configs..."
@@ -179,7 +210,9 @@ for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config cachyos
     }
     pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkg}" ]; then
-        pacman -U --noconfirm --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+        # Double --nodeps (-dd): skip dep *name* checks too, not just versions.
+        # See the matching comment in build-theming.sh for the rationale.
+        pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
             "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}/${pkg}"
         echo "    Installed ${pkg}"
     fi
@@ -231,7 +264,6 @@ chmod 440 "${ROOTFS}/etc/sudoers.d/zz-nabu-nopasswd"
 # in this build, and the explicit nabu rule above covers it. Adding a wheel
 # rule that requires a password would override nabu's NOPASSWD because
 # sudo applies the last matching entry.
-chmod 440 "${ROOTFS}/etc/sudoers.d/wheel"
 
 # Copy skel dotfiles to user home (packages install to /etc/skel/)
 cp -rn "${ROOTFS}/etc/skel/." "${ROOTFS}/home/nabu/" 2>/dev/null || true
@@ -311,6 +343,85 @@ arch-chroot "${ROOTFS}" systemctl enable qbootctl-mark-success.service 2>/dev/nu
 arch-chroot "${ROOTFS}" systemctl enable usb-serial-gadget.service 2>/dev/null || true
 # ananicy-cpp ships inside cachyos-settings; enable best-effort in case that install ever skips
 arch-chroot "${ROOTFS}" systemctl enable ananicy-cpp.service 2>/dev/null || true
+# Auto-rotation full sensor stack (NAS-218).
+# Chain (boot order):
+#   1. local-fs.target mounts /persist (factory sns.reg calibrations)
+#   2. remoteproc autoloads SLPI from /usr/lib/firmware/.../slpi_nb.mbn
+#      (DT enable-slpi.sh flipped the node to status="okay")
+#   3. /dev/fastrpc-adsp appears
+#   4. hexagonrpcd-adsp-rootpd.service starts (root process domain)
+#   5. hexagonrpcd-adsp-sensorspd.service starts (sensors PD; serves the
+#      hexagonfs/ tree to SLPI over FastRPC reverse tunnel)
+#   6. SLPI firmware reads sensor configs (lsm6dso/akm/bu27030/etc) +
+#      sns.reg from /persist, registers Sensor Manager via QRTR
+#   7. iio-sensor-proxy starts (after sensorspd), subscribes via libssc,
+#      exposes net.hadess.SensorProxy on D-Bus
+#   8. GNOME auto-rotates
+#
+# hexagonrpcd services run as User=fastrpc — create the system user. Using a
+# sysusers.d snippet so the user exists at first boot regardless of pacman
+# scriptlet ordering.
+mkdir -p "${ROOTFS}/usr/lib/sysusers.d"
+cat > "${ROOTFS}/usr/lib/sysusers.d/hexagonrpc.conf" << 'SYSUSEOF'
+u fastrpc - "Hexagon FastRPC bridge" - /usr/bin/nologin
+SYSUSEOF
+
+# Without this udev rule the FastRPC device nodes ship as `crw------- root:root`
+# and hexagonrpcd's `User=fastrpc` cannot open them — daemon exits status 4
+# (NOPERMISSION) on every restart. Grant the fastrpc group read+write.
+mkdir -p "${ROOTFS}/etc/udev/rules.d"
+cat > "${ROOTFS}/etc/udev/rules.d/91-fastrpc.rules" << 'UDEVEOF'
+KERNEL=="fastrpc-*", GROUP="fastrpc", MODE="0660"
+UDEVEOF
+
+# Drop-ins to point each hexagonrpcd unit at the nabu-specific hexagonfs root.
+# Without `-R`, the daemon defaults to `/usr/share/qcom/` and won't find the
+# JSON sensor configs which we install at the `<soc>/<vendor>/<device>`
+# subpath. Each unit has a different upstream ExecStart (different -f device
+# + -d domain + optional -s) — preserve those, just append -R.
+NABU_HEXAGONFS=/usr/share/qcom/sm8150/xiaomi/nabu
+
+mkdir -p "${ROOTFS}/etc/systemd/system/hexagonrpcd-adsp-rootpd.service.d"
+cat > "${ROOTFS}/etc/systemd/system/hexagonrpcd-adsp-rootpd.service.d/nabu-path.conf" << CONFEOF
+[Service]
+ExecStart=
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-adsp -d adsp -R ${NABU_HEXAGONFS}
+CONFEOF
+
+mkdir -p "${ROOTFS}/etc/systemd/system/hexagonrpcd-adsp-sensorspd.service.d"
+cat > "${ROOTFS}/etc/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/nabu-path.conf" << CONFEOF
+[Service]
+ExecStart=
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-adsp -d adsp -s -R ${NABU_HEXAGONFS}
+CONFEOF
+
+mkdir -p "${ROOTFS}/etc/systemd/system/hexagonrpcd-sdsp.service.d"
+cat > "${ROOTFS}/etc/systemd/system/hexagonrpcd-sdsp.service.d/nabu-path.conf" << CONFEOF
+[Service]
+ExecStart=
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -s -R ${NABU_HEXAGONFS}
+CONFEOF
+
+# NAS-218: enable the SDSP unit specifically (in addition to the adsp ones
+# enabled below). The upstream ConditionPathExists gates each unit on the
+# corresponding /dev/fastrpc-* device, so a missing FastRPC channel just
+# skips that unit — safe to enable all three.
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-sdsp.service 2>/dev/null || true
+
+# Order iio-sensor-proxy AFTER hexagonrpcd-adsp-sensorspd so SLPI's Sensor
+# Manager is reachable on QRTR before iio-sensor-proxy probes for sensors.
+# Without this drop-in iio-sensor-proxy races, finds nothing, prints
+# "No sensors or missing kernel drivers" and exits — leaving auto-rotate dead.
+mkdir -p "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d"
+cat > "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d/wait-for-slpi.conf" << 'IIOEOF'
+[Unit]
+After=hexagonrpcd-adsp-sensorspd.service
+Wants=hexagonrpcd-adsp-sensorspd.service
+IIOEOF
+
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-rootpd.service 2>/dev/null || true
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-sensorspd.service 2>/dev/null || true
+arch-chroot "${ROOTFS}" systemctl enable iio-sensor-proxy.service 2>/dev/null || true
 # Disable heavy/unnecessary services for tablet use
 arch-chroot "${ROOTFS}" systemctl disable man-db.timer 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl mask ldconfig.service 2>/dev/null || true
@@ -346,6 +457,40 @@ ln -sf /dev/null "${ROOTFS}/etc/systemd/system/dbus-broker.service"
 # Ensure messagebus user exists
 arch-chroot "${ROOTFS}" getent passwd messagebus >/dev/null 2>&1 || \
     arch-chroot "${ROOTFS}" useradd -r -s /usr/bin/nologin -d / messagebus
+
+# 10a-bis. Wire nss-mdns into /etc/nsswitch.conf so the tablet can resolve
+# *.local hostnames and other machines on the LAN can resolve nabu-cachyos.local
+# in return. The `nss-mdns` package is installed but does nothing on its own —
+# glibc only consults it if `mdns_minimal` is on the `hosts:` line. Insert it
+# right before `resolve` so systemd-resolved still wins for non-mDNS queries.
+# Idempotent: re-running the sed when mdns_minimal is already present is a no-op.
+echo "Enabling mDNS resolution in nsswitch.conf..."
+if ! grep -q "mdns_minimal" "${ROOTFS}/etc/nsswitch.conf" 2>/dev/null; then
+    sed -i -E 's/^(hosts:[[:space:]]*[^[:space:]]+)[[:space:]]+(resolve|dns|files)/\1 mdns_minimal [NOTFOUND=return] \2/' \
+        "${ROOTFS}/etc/nsswitch.conf"
+    if ! grep -q "mdns_minimal" "${ROOTFS}/etc/nsswitch.conf"; then
+        echo "  WARNING: nsswitch.conf hosts: line did not match expected pattern — mDNS will not work."
+        echo "  Current line:"
+        grep "^hosts:" "${ROOTFS}/etc/nsswitch.conf" | sed 's/^/    /'
+    fi
+fi
+
+# Advertise SSH over mDNS so `ssh nabu@nabu-cachyos.local` works out of the box.
+# Without this file avahi still publishes the hostname A-record (mDNS resolution
+# works) but doesn't advertise the _ssh._tcp service — fine for ssh, but the
+# explicit service makes the tablet discoverable in Finder/`dns-sd -B _ssh._tcp`.
+mkdir -p "${ROOTFS}/etc/avahi/services"
+cat > "${ROOTFS}/etc/avahi/services/ssh.service" << 'AVAHISSHEOF'
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">%h SSH</name>
+  <service>
+    <type>_ssh._tcp</type>
+    <port>22</port>
+  </service>
+</service-group>
+AVAHISSHEOF
 
 # 10b. NetworkManager sandbox drop-in (kernel doesn't support sandboxing)
 echo "Adding NetworkManager no-sandbox drop-in..."
@@ -438,12 +583,17 @@ arch-chroot "${ROOTFS}" mkinitcpio -p nabu-cachyos || {
     ls -la "${ROOTFS}/boot/efi/initramfs-"* 2>/dev/null || echo "  No initramfs found!"
 }
 
-# 12. fstab (ext4 root, FAT32 ESP)
+# 12. fstab (ext4 root, FAT32 ESP, factory /persist for sensor calibration)
 cat > "${ROOTFS}/etc/fstab" << 'FSTAB'
 # CachyOS Nabu fstab
-PARTLABEL=linux  /           ext4   rw,noatime,discard  0 1
+PARTLABEL=linux    /           ext4   rw,noatime,discard           0 1
 # ESP commented out: FAT32 sector size incompatible with UFS, causes emergency mode
-# PARTLABEL=esp    /boot/efi   vfat   defaults             0 2
+# PARTLABEL=esp    /boot/efi   vfat   defaults                     0 2
+# Factory persist: ext4 on most nabu firmware revisions, but some ship f2fs.
+# nofail keeps boot alive on a mismatch — auto-rotation just stops working.
+# Re-flash with `fastboot getvar partition-type:persist` to confirm FS-type if
+# /persist/sensors/registry/sns.reg never appears after a clean boot.
+PARTLABEL=persist  /persist    ext4   ro,nosuid,nodev,nofail       0 0
 FSTAB
 
 # 13. Leave rootfs in container-local path for build-image.sh to consume

@@ -72,3 +72,10 @@ zsh-syntax-highlighting
 zsh-autosuggestions
 avahi
 nss-mdns
+# Auto-rotation via Qualcomm Sensor Subsystem (NAS-218): iio-sensor-proxy reads
+# the LSM6DSO accelerometer via libssc → libqrtr-glib → kernel QRTR → ADSP SSC
+# firmware (no I2C, so the TrustZone GPIO reservation stays intact). Factory
+# sns.reg calibrations come from the device's own /persist partition, mounted
+# read-only at /persist by fstab.
+libssc
+iio-sensor-proxy

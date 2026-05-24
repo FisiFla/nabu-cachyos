@@ -78,26 +78,42 @@ sif /home/nabu/.ssh/authorized_keys gid 1000
 stat /home/nabu/.ssh/authorized_keys
 EOF
 
-echo "  Injecting SSH key from ${PUBKEY_FILE##*/}..."
+# Pick which container provides debugfs. Prefer the local builder image (cached
+# from a previous `./build.sh`) — it's already pulled and has the right tools.
+# Fall back to a small public Alpine image when the user is flashing from a
+# downloaded release without ever building locally (the common path per the
+# README's "Easy Install"). Without this fallback the script used to silently
+# error or skip, leaving the flashed image with no SSH key.
+if docker image inspect "${DOCKER_IMAGE}" >/dev/null 2>&1; then
+    IMG_REF="${DOCKER_IMAGE}"
+    DEBUGFS_PRELUDE=""
+else
+    echo "  ${DOCKER_IMAGE} not present locally — using alpine:3.20 + e2fsprogs as fallback."
+    IMG_REF="alpine:3.20"
+    # Alpine splits debugfs out into the e2fsprogs-extra subpackage — `e2fsprogs`
+    # alone provides e2fsck/mke2fs but not debugfs, so both are required.
+    DEBUGFS_PRELUDE="apk add --no-cache e2fsprogs e2fsprogs-extra >/dev/null 2>&1 && "
+fi
+
+echo "  Injecting SSH key from ${PUBKEY_FILE##*/} via ${IMG_REF}..."
 docker run --rm \
     -v "${WORK_DIR}:/work" \
     -v "${IMAGE_PATH}:/image/linux.img" \
-    "${DOCKER_IMAGE}" \
-    bash -lc '
-        set -euo pipefail
+    "${IMG_REF}" \
+    sh -c "${DEBUGFS_PRELUDE}set -eu
         debugfs -w -f /work/debugfs.cmds /image/linux.img >/work/debugfs.stdout 2>/work/debugfs.stderr || true
-        debugfs -R "stat /home/nabu/.ssh/authorized_keys" /image/linux.img >/work/debugfs.verify 2>&1
-        if ! grep -q "^Inode:" /work/debugfs.verify; then
-            echo "ERROR: SSH key injection failed — debugfs could not stat /home/nabu/.ssh/authorized_keys" >&2
-            echo "       debugfs stderr:" >&2
-            sed "s/^/         /" /work/debugfs.stderr >&2
+        debugfs -R 'stat /home/nabu/.ssh/authorized_keys' /image/linux.img >/work/debugfs.verify 2>&1
+        if ! grep -q '^Inode:' /work/debugfs.verify; then
+            echo 'ERROR: SSH key injection failed — debugfs could not stat /home/nabu/.ssh/authorized_keys' >&2
+            echo '       debugfs stderr:' >&2
+            sed 's/^/         /' /work/debugfs.stderr >&2
             exit 1
         fi
         status=0
-        e2fsck -fy /image/linux.img >/dev/null || status=$?
-        if [ "$status" -gt 1 ]; then
-            exit "$status"
+        e2fsck -fy /image/linux.img >/dev/null || status=\$?
+        if [ \"\$status\" -gt 1 ]; then
+            exit \"\$status\"
         fi
-    '
+    "
 
 echo "  SSH key installed for user nabu."

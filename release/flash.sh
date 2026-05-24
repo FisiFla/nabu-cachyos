@@ -54,7 +54,23 @@ if [ "${SKIP_SSH_KEY_INJECTION:-0}" != "1" ] && [ -x "${SSH_KEY_HELPER}" ]; then
 fi
 
 echo "[4/5] Flashing rootfs (this takes ~4 minutes)..."
-fastboot flash linux "${SCRIPT_DIR}/linux.img"
+# macOS fastboot can't auto-sparse files > 256 MB, and the linux rootfs is ~9 GB.
+# `fastboot flash linux <raw>` errors with "Failed reading from linux" on Darwin.
+# When img2simg is available (`brew install simg2img`) we pre-sparse before
+# flashing. On Linux, fastboot handles sparsing internally so we ship the raw
+# image directly — keeps the Linux path one-step.
+FLASH_IMG="${SCRIPT_DIR}/linux.img"
+if [ "$(uname -s)" = "Darwin" ]; then
+    if command -v img2simg >/dev/null 2>&1; then
+        echo "  Pre-sparsing for macOS fastboot..."
+        img2simg "${SCRIPT_DIR}/linux.img" "${SCRIPT_DIR}/linux.sparse.img"
+        FLASH_IMG="${SCRIPT_DIR}/linux.sparse.img"
+    else
+        echo "  WARNING: img2simg not found. fastboot may fail on rootfs > 256 MB."
+        echo "  Install with: brew install simg2img"
+    fi
+fi
+fastboot flash linux "${FLASH_IMG}"
 
 echo "[5/5] Setting boot slot and rebooting..."
 fastboot set_active b

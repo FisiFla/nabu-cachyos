@@ -35,11 +35,18 @@ build_and_install() {
         return 0
     }
 
-    # Install into target rootfs
+    # Install into target rootfs.
+    # `--nodeps --nodeps` (a.k.a. `-dd`) is required: single `--nodeps` only
+    # skips dep *version* checks but still validates dep package names. Some
+    # CachyOS PKGBUILDs reference AUR-only deps that don't exist in ALARM
+    # (e.g. cachyos-fish-config -> fish-autopair, fish-pure-prompt as of
+    # May 2026), and pacman bails with an interactive "skip package?" prompt
+    # that kills a non-tty build. Double `--nodeps` skips all dep checks —
+    # safe for theming because the missing deps are cosmetic plugins.
     local pkg
     pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
     if [ -n "${pkg}" ]; then
-        pacman -U --noconfirm --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+        pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
             "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}/${pkg}"
         echo "    Installed ${pkg}"
     else

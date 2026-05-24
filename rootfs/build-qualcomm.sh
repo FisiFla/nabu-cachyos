@@ -63,7 +63,7 @@ DESTDIR="${ROOTFS}" meson install -C builddir
 # which runs `qbootctl -m` after multi-user.target to mark the active slot
 # as successfully booted. Without it, every reboot drains slot-retry-count
 # until the bootloader rolls slot B back to Android. See NAS-229.
-echo "  [5/5] Building qbootctl..."
+echo "  [5/6] Building qbootctl..."
 cd "${BUILD_DIR}"
 git clone --depth 1 https://github.com/linux-msm/qbootctl.git
 cd qbootctl
@@ -71,8 +71,31 @@ meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
 DESTDIR="${ROOTFS}" meson install -C builddir
 
+# 6. Build hexagonrpc — FastRPC bridge between the AP and Qualcomm DSPs.
+# NAS-218: the SLPI co-processor uses FastRPC's reverse tunnel to read
+# sensor registry files (sns.reg, *.json configs) from the AP. Without
+# hexagonrpcd serving those files, the Sensor Manager firmware can't
+# initialize the per-sensor configs and Sensor Manager service never
+# appears on QRTR — leaving iio-sensor-proxy with nothing to subscribe to.
+#
+# Ships three templated systemd units (only the adsp ones are useful on
+# sm8150 nabu — there is no separate SDSP):
+#   hexagonrpcd-adsp-rootpd.service     — root process domain
+#   hexagonrpcd-adsp-sensorspd.service  — sensors process domain (SLPI)
+#   hexagonrpcd-sdsp.service            — gated off (no /dev/fastrpc-sdsp)
+# build-rootfs.sh enables the first two.
+HEXAGONRPC_COMMIT="dd9ac70c026e1bad93e8cffa3801255b8ceb551e"
+echo "  [6/6] Building hexagonrpc (sensors FastRPC bridge)..."
+cd "${BUILD_DIR}"
+git clone https://github.com/linux-msm/hexagonrpc.git
+git -C hexagonrpc checkout "${HEXAGONRPC_COMMIT}"
+cd hexagonrpc
+meson setup builddir --prefix=/usr --buildtype=release
+meson compile -C builddir
+DESTDIR="${ROOTFS}" meson install -C builddir
+
 echo "--- Qualcomm userspace build complete ---"
-echo "  Installed: rmtfs, tqftpserv, libqrtr v1.2, qbootctl"
+echo "  Installed: rmtfs, tqftpserv, libqrtr v1.2, qbootctl, hexagonrpcd"
 echo "  (qrtr-ns not needed — kernel has in-kernel QRTR name service)"
 
 # Clean up

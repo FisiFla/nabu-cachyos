@@ -121,12 +121,12 @@ docker run --rm --privileged \
         cd /build
 
         # Stage 1: Firmware
-        if [ -d output/firmware/nabu-firmware ]; then
-            echo '[3/6] Firmware already fetched, skipping.'
-        else
-            echo '[3/6] Fetching firmware...'
-            bash firmware/fetch-firmware.sh
-        fi
+        # Always invoke fetch-firmware.sh — the script itself does per-target
+        # skip-if-cached. The previous outer "if -d nabu-firmware" short-circuit
+        # silently skipped newly-added fetch steps (e.g. SLPI bundle for NAS-218)
+        # whenever the original nabu-firmware/ dir was already cached.
+        echo '[3/6] Fetching firmware (idempotent — per-blob skip inside)...'
+        bash firmware/fetch-firmware.sh
 
         # Stage 2: Kernel
         if [ -f output/kernel/Image.gz ] && [ -f output/kernel/sm8150-xiaomi-nabu.dtb ]; then

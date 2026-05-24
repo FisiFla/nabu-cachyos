@@ -41,6 +41,20 @@ cat >> "$DTS" << 'DTSEOF'
 &remoteproc_slpi {
 	status = "okay";
 	firmware-name = "qcom/sm8150/xiaomi/nabu/slpi_nb.mbn";
+
+	/* NAS-218 / NAS-247: hand the SLPI's remote-heap-VMID to the fastrpc
+	 * subnode. Without this property, fastrpc.c's `cctx->vmcount` stays 0,
+	 * `qcom_scm_assign_mem()` is skipped, the DSP never gets RWX
+	 * permissions on the heap we're sending, and INIT_CREATE_STATIC
+	 * times out with the firmware-side message "USER-PD DOG detects
+	 * stalled initialization". Value 5 = VMID_SSC_Q6 (from downstream
+	 * adsprpc.c on the crDroid sm8150 kernel — matches what Qualcomm's
+	 * SSC PD expects for memory ownership). */
+	glink-edge {
+		fastrpc {
+			qcom,vmid-rhvm = <5>;
+		};
+	};
 };
 DTSEOF
 

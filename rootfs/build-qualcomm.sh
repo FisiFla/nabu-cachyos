@@ -90,6 +90,18 @@ cd "${BUILD_DIR}"
 git clone https://github.com/linux-msm/hexagonrpc.git
 git -C hexagonrpc checkout "${HEXAGONRPC_COMMIT}"
 cd hexagonrpc
+# NAS-247: apply our local patch that adds the `-S NAME` option →
+# FASTRPC_IOCTL_INIT_CREATE_STATIC. Without it, hexagonrpcd can only
+# INIT_ATTACH or INIT_ATTACH_SNS, neither of which work for nabu's SLPI
+# sensorspd which needs the static-PD-create path. See
+# tools/hexagonrpc-add-create-static.patch.
+HEXAGONRPC_PATCH=/build/tools/hexagonrpc-add-create-static.patch
+if [ -f "${HEXAGONRPC_PATCH}" ]; then
+    echo "    Applying hexagonrpc-add-create-static.patch..."
+    git apply "${HEXAGONRPC_PATCH}"
+else
+    echo "    WARNING: ${HEXAGONRPC_PATCH} missing — building unpatched hexagonrpcd."
+fi
 meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
 DESTDIR="${ROOTFS}" meson install -C builddir

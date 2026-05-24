@@ -57,7 +57,11 @@ cd "${BUILD_DIR}/linux"
 PATCH_SENTINEL=".cachyos-patches-applied"
 if [ ! -f "${PATCH_SENTINEL}" ]; then
     # BORE (0001) is critical. Others are best-effort — the kernel works without them.
-    CRITICAL_PATCHES=("0001-bore")
+    # NAS-218 / NAS-247: the fastrpc INIT_CREATE_STATIC pageslen fix is also
+    # critical — without it, SLPI sensorspd PD-create fails with EPIPE and the
+    # entire sensor stack stays dead. Sensor hardware is unreachable any other
+    # way on nabu (the I2C path is TrustZone-blocked, see add-sensors.sh).
+    CRITICAL_PATCHES=("0001-bore" "0005-fastrpc-fix-init-create-static-pageslen")
     echo "Applying patches..."
     for patch in "${SCRIPT_DIR}/patches/"*.patch; do
         patchname="$(basename "${patch}")"

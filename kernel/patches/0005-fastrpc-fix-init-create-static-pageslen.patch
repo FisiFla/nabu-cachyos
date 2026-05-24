@@ -1,0 +1,73 @@
+From: F. F. <flavio.fisicaro@ketryx.com>
+Date: 2026-05-25
+Subject: [PATCH] misc: fastrpc: fix INIT_CREATE_STATIC to advertise the remote-heap page
+
+`fastrpc_init_create_static_process()` allocates a remote-heap buffer
+and sends a single-page descriptor (the heap's phys/size) in args[2] to
+the DSP, but tells the DSP `inbuf.pageslen = 0`.  The DSP-side parser
+reads `inbuf.pageslen` to know how many pages to consume from args[2];
+seeing zero, it ignores the heap descriptor and the listener-PD setup
+never completes, causing the FastRPC call to fail with -EPIPE.
+
+The downstream Qualcomm driver (drivers/char/adsprpc.c) gets this
+right: it sets `inbuf.pageslen = 1` whenever it allocates a fresh
+remote-heap mapping, and `0` only on subsequent invocations (when the
+heap is already known to the DSP).
+
+Match that behaviour.  Track whether we just allocated the remote heap
+in this call; if so, advertise pageslen=1 so the DSP picks up the
+single-page descriptor it has been sent.
+
+Symptom on Xiaomi Pad 5 (sm8150 nabu) with hexagonrpcd + an
+`INIT_CREATE_STATIC` request for the SLPI `sensorspd` PD:
+
+  hexagonrpcd[N]: Could not attach to FastRPC node: Broken pipe
+  hexagonrpcd[N]: Starting /usr/bin/hexagonrpcd (INIT_CREATE_STATIC)
+                  on /dev/fastrpc-sdsp
+
+After this patch, the SLPI sensorspd PD creates successfully and the
+Qualcomm Sensor Manager service appears stably on QRTR; the
+~40-second-period SLPI crash loop (`remoteproc remoteproc0: crash
+detected in slpi: type fatal error`) stops.
+
+Fixes: 0871561055e6 ("misc: fastrpc: Add support for audiopd")
+Signed-off-by: F. F. <flavio.fisicaro@ketryx.com>
+---
+ drivers/misc/fastrpc.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/misc/fastrpc.c b/drivers/misc/fastrpc.c
+--- a/drivers/misc/fastrpc.c
++++ b/drivers/misc/fastrpc.c
+@@ -1240,6 +1240,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
+ 	struct fastrpc_init_create_static init;
+ 	struct fastrpc_invoke_args *args;
+ 	struct fastrpc_phy_page pages[1];
++	bool fresh_remote_heap = false;
+ 	char *name;
+ 	int err;
+ 	bool scm_done = false;
+@@ -1276,6 +1277,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
+ 						&fl->cctx->remote_heap);
+ 		if (err)
+ 			goto err_name;
++		fresh_remote_heap = true;
+
+ 		/* Map if we have any heap VMIDs associated with this ADSP Static Process. */
+ 		if (fl->cctx->vmcount) {
+@@ -1295,7 +1297,12 @@ static int fastrpc_init_create_static_process(struct fastrpc_user *fl,
+
+ 	inbuf.client_id = fl->client_id;
+ 	inbuf.namelen = init.namelen;
+-	inbuf.pageslen = 0;
++	/*
++	 * Advertise the heap-page descriptor we put in args[2] only on the
++	 * first init call (when we just allocated cctx->remote_heap).
++	 * On subsequent calls the DSP already has the mapping.
++	 */
++	inbuf.pageslen = fresh_remote_heap ? 1 : 0;
+ 	fl->pd = USER_PD;
+
+ 	args[0].ptr = (u64)(uintptr_t)&inbuf;
+--
+2.43.0

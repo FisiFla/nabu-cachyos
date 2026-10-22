@@ -1,0 +1,16 @@
+[Unit]
+Description=Stop hexagonrpcd sensor daemons before suspend
+ConditionFirmware=device-tree-compatible(qcom,sm8150)
+Before=suspend.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl stop hexagonrpcd-adsp-sensorspd.service hexagonrpcd-adsp-rootpd.service
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=closed
+ProtectSystem=strict
+
+[Install]
+WantedBy=suspend.target

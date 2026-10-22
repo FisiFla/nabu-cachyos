@@ -1,0 +1,14 @@
+#!/usr/bin/bash
+# Systemd sleep hook: runs around every suspend cycle with
+#   $1 = "pre" | "post"
+# iio-sensor-proxy does not survive SLPI suspend states — its cached
+# discovery state goes stale once the Sensor Manager service restarts.
+# Stopping it at suspend and starting it after resume forces a fresh
+# probe of the QRTR sensor services (the wait-for-slpi-sensors
+# ExecStartPre it carries covers the ready-wait).
+case "${1:-}" in
+    pre)  systemctl stop  iio-sensor-proxy.service 2>/dev/null || true ;;
+    post) systemctl start iio-sensor-proxy.service 2>/dev/null || true ;;
+    *) : ;;
+esac
+exit 0

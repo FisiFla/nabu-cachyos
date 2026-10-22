@@ -1,0 +1,17 @@
+[Unit]
+Description=Restart hexagonrpcd sensor daemons after resume
+ConditionFirmware=device-tree-compatible(qcom,sm8150)
+After=suspend.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl start hexagonrpcd-adsp-rootpd.service
+ExecStart=/usr/bin/systemctl start hexagonrpcd-adsp-sensorspd.service
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=closed
+ProtectSystem=strict
+
+[Install]
+WantedBy=suspend.target

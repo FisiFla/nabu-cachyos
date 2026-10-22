@@ -439,8 +439,11 @@ arch-chroot "${ROOTFS}" groupadd -r fastrpc 2>/dev/null || true
 arch-chroot "${ROOTFS}" useradd -r -g fastrpc -s /usr/bin/nologin \
     -c "Hexagon FastRPC bridge" fastrpc 2>/dev/null || true
 mkdir -p "${ROOTFS}/etc/udev/rules.d"
+# OWNER + TAG+="systemd" imported from NabuLinux's 60-hexagonrpcd.rules:
+# OWNER hands the node to the fastrpc user, TAG+="systemd" makes systemd
+# track the device units (needed for device-bound dependencies).
 cat > "${ROOTFS}/etc/udev/rules.d/91-fastrpc.rules" << 'UDEVEOF'
-KERNEL=="fastrpc-*", GROUP="fastrpc", MODE="0660"
+SUBSYSTEM=="misc", KERNEL=="fastrpc-*", OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd"
 UDEVEOF
 
 # Drop-ins to point each hexagonrpcd unit at the nabu-specific hexagonfs root.
@@ -463,6 +466,23 @@ cat > "${ROOTFS}/etc/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/nabu-pa
 ExecStart=
 ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-adsp -d adsp -s -R ${NABU_HEXAGONFS}
 CONFEOF
+
+# Restart policy imported from NabuLinux's nabu-slpi-hexagonrpcd.conf: the
+# SLPI root-PD service takes a while to (re-)announce itself on QRTR, so a
+# failed attach must be retried, and after suspend/resume the units must
+# come back together. (The device=/dev/fastrpc-sdsp, dsp=sdsp, extra=-s
+# parts of their conf are NOT imported — our invocation is adsp/-s.)
+restart_dropin() {
+    local unit="$1"
+    mkdir -p "${ROOTFS}/etc/systemd/system/${unit}.service.d"
+    cat > "${ROOTFS}/etc/systemd/system/${unit}.service.d/nabu-restart.conf" << 'RESTARTCONF'
+[Service]
+Restart=on-failure
+RestartSec=1s
+RESTARTCONF
+}
+restart_dropin "hexagonrpcd-adsp-rootpd"
+restart_dropin "hexagonrpcd-adsp-sensorspd"
 
 mkdir -p "${ROOTFS}/etc/systemd/system/hexagonrpcd-sdsp.service.d"
 # NAS-247: use -S sensorspd (INIT_CREATE_STATIC, our patched -S option) NOT
@@ -598,6 +618,11 @@ arch-chroot "${ROOTFS}" ldconfig
 arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-rootpd.service 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-adsp-sensorspd.service 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-sdsp.service 2>/dev/null || true
+# Suspend/resume babysit (from rootfs/overlay): stop the daemons before the
+# tablet suspends, restart rootpd then sensorspd after resume. Without this
+# the SLPI PDs stay in the suspended state and sensors never come back.
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-suspend.service 2>/dev/null || true
+arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-resume.service 2>/dev/null || true
 
 # Create systemd services for Qualcomm daemons
 # NOTE: qrtr-ns is NOT needed — kernel 6.14 has in-kernel QRTR name service.

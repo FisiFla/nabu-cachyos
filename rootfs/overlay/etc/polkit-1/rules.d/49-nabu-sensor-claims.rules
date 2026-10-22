@@ -1,0 +1,16 @@
+// Allow the active local session to claim iio-sensor-proxy sensors.
+//
+// The shipped policy (net.hadess.SensorProxy.policy) has allow_active=yes but
+// polkit refuses the claim when it cannot map the caller to an active local
+// session. On nabu that hit gnome-settings-daemon's ambient-light claim right
+// after autologin ("Sensor claim not allowed"), so automatic brightness never
+// worked; the accelerometer claim raced with it.
+//
+// This only widens the rule for local, active sessions: remote (ssh) sessions
+// and inactive ones still follow the stock policy.
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("net.hadess.SensorProxy.") === 0 &&
+        subject.local && subject.active) {
+        return polkit.Result.YES;
+    }
+});

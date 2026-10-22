@@ -168,6 +168,11 @@ mkdir -p "${ROOTFS}/mnt/vendor/persist"
 # 4. Copy overlay configs
 echo "Applying overlay configs..."
 cp -a "${SCRIPT_DIR}/overlay/"* "${ROOTFS}/"
+# Overlay files keep the builder's ownership. polkitd and udev only load
+# rules they can trust, so hand those trees back to root.
+chown -R root:root "${ROOTFS}/etc/polkit-1" 2>/dev/null || true
+chmod 644 "${ROOTFS}/etc/polkit-1/rules.d/"*.rules 2>/dev/null || true
+chown -R root:root "${ROOTFS}/etc/udev/rules.d" 2>/dev/null || true
 
 # 5. Write WiFi connection file (only if credentials provided)
 if [ -n "${WIFI_SSID}" ] && [ -n "${WIFI_PASSWORD}" ]; then
@@ -465,6 +470,25 @@ mkdir -p "${ROOTFS}/etc/udev/rules.d"
 # track the device units (needed for device-bound dependencies).
 cat > "${ROOTFS}/etc/udev/rules.d/91-fastrpc.rules" << 'UDEVEOF'
 SUBSYSTEM=="misc", KERNEL=="fastrpc-*", OWNER="fastrpc", GROUP="fastrpc", MODE="0660", TAG+="systemd"
+# The SSC accelerometer reports its samples in a frame rotated 180 degrees
+# about the screen normal, while the panel's native orientation is what
+# mutter rotates against. Without this the screen auto-rotates the wrong way
+# round (upright became upside down, verified on the tablet). The SSC accel
+# driver in iio-sensor-proxy honours ACCEL_MOUNT_MATRIX exactly like the IIO
+# and input drivers do, so a udev property is enough -- no source patch.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-*", ENV{ACCEL_MOUNT_MATRIX}="-1,0,0;0,-1,0;0,0,1"
+UDEVEOF
+
+# The Xiaomi keyboard cover exposes a mouse + touchpad HID interface even
+# when it is detached and no keyboard is attached. mutter's touch-mode logic
+# is `touch_mode = !has_pointer` when there is no tablet switch, so any
+# pointing device -- phantom or not -- means "desktop mode" and the
+# orientation manager stops tracking the accelerometer: auto-rotation then
+# never happens at all (verified: rotating did nothing until this rule).
+# Keys live on the same HID device, so ignore only the pointer role rather
+# than the whole device.
+cat > "${ROOTFS}/etc/udev/rules.d/79-nabu-keyboard-pointer.rules" << 'UDEVEOF'
+SUBSYSTEM=="input", ATTRS{name}=="Xiaomi Pad", ENV{LIBINPUT_IGNORE_DEVICE}="1"
 UDEVEOF
 
 # Drop-ins to point each hexagonrpcd unit at the nabu-specific hexagonfs root.

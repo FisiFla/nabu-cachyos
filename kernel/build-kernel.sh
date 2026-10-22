@@ -81,6 +81,28 @@ cd "${BUILD_DIR}/linux"
 # Apply CachyOS patches. The sentinel above embeds the upstream HEAD and a
 # hash of all patch bodies, so re-runs never double-apply and never keep an
 # outdated patch revision.
+# A FAILED `git apply --3way` must not be trusted silent: git stages the
+# hunks that succeeded and leaves conflict markers in the rest, so the tree
+# ends up half-applied (this bit a real build: adios half-way in left
+# elevator.c with unresolved conflicts and the kernel wouldn't compile).
+# rollback_patch_files() restores exactly the files the failed patch touched
+# so later patches and the build start from a clean tree. Assumes patches in
+# the set touch disjoint files (true here: sched/net/block/drivers/fastrpc).
+rollback_patch_files() {
+    local patch="$1" f
+    git reset -q -- . 2>/dev/null || true
+    git apply --numstat "${patch}" 2>/dev/null \
+        | awk '{sub("^a/", "", $3); sub("^b/", "", $3); print $3}' \
+        | sort -u \
+        | while IFS= read -r f; do
+            [ -n "${f}" ] || continue
+            if git ls-tree -r HEAD --name-only | grep -Fxq -- "${f}"; then
+                git checkout -f HEAD -- "${f}"
+            else
+                rm -f -- "${f}"
+            fi
+        done
+}
 PATCH_SENTINEL_USED=0
 if [ -f "${PATCH_SENTINEL}" ] && grep -qx "${EXPECTED_SENTINEL}" "${PATCH_SENTINEL}" 2>/dev/null; then
     PATCH_SENTINEL_USED=1
@@ -105,9 +127,15 @@ if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
         if git apply --check "${patch}" 2>/dev/null; then
             git apply "${patch}"
             echo "    OK"
-        elif git apply --3way "${patch}" 2>/dev/null; then
+            continue
+        fi
+        if git apply --3way "${patch}" 2>/dev/null; then
             echo "    OK (3-way merge)"
-        elif [ "${unshallowed}" = "0" ] && [ -f .git/shallow ] \
+            continue
+        fi
+        # The 3-way attempt just failed and may have left hunks behind.
+        rollback_patch_files "${patch}"
+        if [ "${unshallowed}" = "0" ] && [ -f .git/shallow ] \
                 && [ "${KERNEL_NO_UNSHALLOW:-0}" != "1" ]; then
             # --3way needs the base blobs the patch's index lines reference;
             # a --depth 1 clone doesn't have them. Fetch the full branch
@@ -116,19 +144,14 @@ if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
             echo "    shallow clone lacks 3-way base blobs — fetching full history (one-time)..."
             git fetch --unshallow origin "${LOCAL_KERNEL_REF}" 2>/dev/null || true
             unshallowed=1
-            if git apply --3way "${patch}" 2>/dev/null; then
-                echo "    OK (3-way merge after unshallow)"
-            elif ${is_critical}; then
-                echo "    FATAL: critical patch ${patchname} failed to apply. Aborting."
-                exit 1
-            else
-                echo "    WARNING: ${patchname} did not apply cleanly, skipping."
-                echo "    The kernel will work without it."
-            fi
+        fi
+        if git apply --3way "${patch}" 2>/dev/null; then
+            echo "    OK (3-way merge)"
         elif ${is_critical}; then
             echo "    FATAL: critical patch ${patchname} failed to apply. Aborting."
             exit 1
         else
+            rollback_patch_files "${patch}"
             echo "    WARNING: ${patchname} did not apply cleanly, skipping."
             echo "    The kernel will work without it."
         fi

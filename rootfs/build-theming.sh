@@ -4,6 +4,9 @@ set -euo pipefail
 ROOTFS="${1:?Usage: build-theming.sh <rootfs-path>}"
 THEME_BUILD="/tmp/theming-build"
 PKGBUILDS_REPO="https://github.com/CachyOS/CachyOS-PKGBUILDS.git"
+PINS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=rootfs/upstream-pins.sh
+source "${PINS_DIR}/upstream-pins.sh"
 
 echo "--- Building CachyOS theming packages ---"
 
@@ -19,7 +22,11 @@ cd "${THEME_BUILD}"
 
 if [ ! -d "CachyOS-PKGBUILDS" ]; then
     echo "Cloning CachyOS-PKGBUILDS..."
-    sudo -u builder git clone --depth 1 "${PKGBUILDS_REPO}" CachyOS-PKGBUILDS
+    sudo -u builder bash -c "set -euo pipefail
+        git init --quiet CachyOS-PKGBUILDS
+        git -C CachyOS-PKGBUILDS remote add origin '${PKGBUILDS_REPO}'
+        git -C CachyOS-PKGBUILDS fetch --quiet --depth 1 origin '${CACHYOS_PKGBUILDS_COMMIT}'
+        git -C CachyOS-PKGBUILDS checkout --quiet FETCH_HEAD"
 fi
 
 # Helper: build a PKGBUILD from CachyOS-PKGBUILDS/<subdir> and install to rootfs

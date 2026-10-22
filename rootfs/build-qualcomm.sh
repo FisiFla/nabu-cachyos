@@ -15,6 +15,9 @@ set -euo pipefail
 
 ROOTFS="${1:?Usage: build-qualcomm.sh <rootfs-path>}"
 BUILD_DIR="/tmp/qcom-build"
+PINS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=rootfs/upstream-pins.sh
+source "${PINS_DIR}/upstream-pins.sh"
 
 echo "--- Building Qualcomm userspace from source ---"
 
@@ -25,7 +28,7 @@ mkdir -p "${BUILD_DIR}"
 # Install to host (so rmtfs/tqftpserv can compile+link) and to rootfs
 echo "  [1/4] Building qrtr v1.2 (libqrtr)..."
 cd "${BUILD_DIR}"
-git clone --depth 1 https://github.com/linux-msm/qrtr.git
+clone_pinned https://github.com/linux-msm/qrtr.git "qrtr" "${QRTR_COMMIT}"
 cd qrtr
 meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
@@ -36,7 +39,7 @@ ldconfig
 # 2. Build qmic (QMI compiler) — needed to generate rmtfs source files
 echo "  [2/4] Building qmic..."
 cd "${BUILD_DIR}"
-git clone --depth 1 https://github.com/linux-msm/qmic.git
+clone_pinned https://github.com/linux-msm/qmic.git "qmic" "${QMIC_COMMIT}"
 cd qmic
 make prefix=/usr
 make prefix=/usr install
@@ -44,7 +47,7 @@ make prefix=/usr install
 # 3. Build rmtfs — depends on libqrtr + libudev + qmic
 echo "  [3/4] Building rmtfs..."
 cd "${BUILD_DIR}"
-git clone --depth 1 https://github.com/linux-msm/rmtfs.git
+clone_pinned https://github.com/linux-msm/rmtfs.git "rmtfs" "${RMTFS_COMMIT}"
 cd rmtfs
 make prefix=/usr
 install -Dm755 rmtfs "${ROOTFS}/usr/bin/rmtfs"
@@ -52,7 +55,7 @@ install -Dm755 rmtfs "${ROOTFS}/usr/bin/rmtfs"
 # 4. Build tqftpserv — depends on libqrtr + libzstd
 echo "  [4/4] Building tqftpserv..."
 cd "${BUILD_DIR}"
-git clone --depth 1 https://github.com/linux-msm/tqftpserv.git
+clone_pinned https://github.com/linux-msm/tqftpserv.git "tqftpserv" "${TQFTPSERV_COMMIT}"
 cd tqftpserv
 meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
@@ -65,7 +68,7 @@ DESTDIR="${ROOTFS}" meson install -C builddir
 # until the bootloader rolls slot B back to Android. See NAS-229.
 echo "  [5/6] Building qbootctl..."
 cd "${BUILD_DIR}"
-git clone --depth 1 https://github.com/linux-msm/qbootctl.git
+clone_pinned https://github.com/linux-msm/qbootctl.git "qbootctl" "${QBOOTCTL_COMMIT}"
 cd qbootctl
 meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
@@ -84,11 +87,10 @@ DESTDIR="${ROOTFS}" meson install -C builddir
 #   hexagonrpcd-adsp-sensorspd.service  — sensors process domain (SLPI)
 #   hexagonrpcd-sdsp.service            — gated off (no /dev/fastrpc-sdsp)
 # build-rootfs.sh enables the first two.
-HEXAGONRPC_COMMIT="dd9ac70c026e1bad93e8cffa3801255b8ceb551e"
+# hexagonrpc is pinned in rootfs/upstream-pins.sh.
 echo "  [6/6] Building hexagonrpc (sensors FastRPC bridge)..."
 cd "${BUILD_DIR}"
-git clone https://github.com/linux-msm/hexagonrpc.git
-git -C hexagonrpc checkout "${HEXAGONRPC_COMMIT}"
+clone_pinned https://github.com/linux-msm/hexagonrpc.git hexagonrpc "${HEXAGONRPC_COMMIT}"
 cd hexagonrpc
 # NAS-247: apply our local patch that adds the `-S NAME` option →
 # FASTRPC_IOCTL_INIT_CREATE_STATIC. Without it, hexagonrpcd can only

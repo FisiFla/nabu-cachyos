@@ -381,6 +381,8 @@ nabu-cachyos/
 ├── rootfs/
 │   ├── build-rootfs.sh         # Bootstraps and configures the rootfs
 │   ├── build-theming.sh        # Builds CachyOS theming packages from PKGBUILDS
+│   ├── build-qualcomm.sh       # Builds qrtr/qmic/rmtfs/tqftpserv/qbootctl/hexagonrpc
+│   ├── upstream-pins.sh        # Pinned upstream commits for every cloned repo
 │   ├── packages.txt            # Official repo packages to install
 │   ├── packages-aur.txt        # AUR packages (Vivaldi)
 │   ├── pacman-alarm.conf       # Pacman config pointing to ALARM mirrors

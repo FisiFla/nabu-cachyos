@@ -10,6 +10,9 @@ WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Upstream commit pins for everything cloned below (AUR, CachyOS, zsh).
+# shellcheck source=rootfs/upstream-pins.sh
+source "${SCRIPT_DIR}/upstream-pins.sh"
 # Build rootfs in container-local filesystem (not bind mount) to avoid
 # macOS Docker volume lock issues with pacman, then copy to output.
 ROOTFS="/tmp/rootfs-build"
@@ -183,13 +186,27 @@ AUR_BUILD="/tmp/aur-build"
 mkdir -p "${AUR_BUILD}"
 chown builder:builder "${AUR_BUILD}"
 mapfile -t aur_packages < <(grep -vE '^(#|$)' "${SCRIPT_DIR}/packages-aur.txt")
+declare -A AUR_PINS=(
+    [vivaldi-multiarch-bin]="${VIVALDI_MULTIARCH_BIN_COMMIT}"
+    [paru-bin]="${PARU_BIN_COMMIT}"
+)
 for pkg in "${aur_packages[@]}"; do
     echo "  Building ${pkg} from AUR..."
+    if [ -z "${AUR_PINS[${pkg}]:-}" ]; then
+        echo "  WARNING: no pin recorded for ${pkg} — refusing a HEAD clone. Add one in upstream-pins.sh."
+        continue
+    fi
     if [ -d "${AUR_BUILD:?}/${pkg:?}" ]; then
         rm -rf "${AUR_BUILD:?}/${pkg:?}"
     fi
-    sudo -u builder git clone --depth 1 "https://aur.archlinux.org/${pkg}.git" "${AUR_BUILD}/${pkg}" || {
-        echo "  WARNING: Failed to clone ${pkg}, skipping"
+    # git init + fetch <pin> instead of clone --depth 1: the pin is only
+    # guaranteed to be fetched when it is asked for by hash.
+    sudo -u builder bash -c "set -euo pipefail
+        git init --quiet '${AUR_BUILD}/${pkg}'
+        git -C '${AUR_BUILD}/${pkg}' remote add origin 'https://aur.archlinux.org/${pkg}.git'
+        git -C '${AUR_BUILD}/${pkg}' fetch --quiet --depth 1 origin '${AUR_PINS[${pkg}]}'
+        git -C '${AUR_BUILD}/${pkg}' checkout --quiet FETCH_HEAD" || {
+        echo "  WARNING: Failed to fetch ${pkg} at pinned commit, skipping"
         continue
     }
     cd "${AUR_BUILD}/${pkg}"
@@ -219,7 +236,11 @@ mkdir -p "${TOOLS_BUILD}"
 chown builder:builder "${TOOLS_BUILD}"
 cd "${TOOLS_BUILD}"
 if [ ! -d "CachyOS-PKGBUILDS" ]; then
-    sudo -u builder git clone --depth 1 https://github.com/CachyOS/CachyOS-PKGBUILDS.git
+    sudo -u builder bash -c "set -euo pipefail
+        git init --quiet CachyOS-PKGBUILDS
+        git -C CachyOS-PKGBUILDS remote add origin https://github.com/CachyOS/CachyOS-PKGBUILDS.git
+        git -C CachyOS-PKGBUILDS fetch --quiet --depth 1 origin '${CACHYOS_PKGBUILDS_COMMIT}'
+        git -C CachyOS-PKGBUILDS checkout --quiet FETCH_HEAD"
 fi
 
 for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config cachyos-packageinstaller; do
@@ -241,11 +262,12 @@ done
 
 # 8c. Install zsh plugins required by cachyos-zsh-config (not in ALARM repos)
 echo "Installing zsh plugins..."
-git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git "${ROOTFS}/usr/share/oh-my-zsh" 2>/dev/null || true
+clone_pinned https://github.com/ohmyzsh/ohmyzsh.git "${ROOTFS}/usr/share/oh-my-zsh" "${OHMYZSH_COMMIT}"
 rm -rf "${ROOTFS}/usr/share/oh-my-zsh/.git" 2>/dev/null || true
-git clone --depth 1 https://github.com/romkatv/powerlevel10k.git "${ROOTFS}/usr/share/zsh-theme-powerlevel10k" 2>/dev/null || true
+clone_pinned https://github.com/romkatv/powerlevel10k.git "${ROOTFS}/usr/share/zsh-theme-powerlevel10k" "${POWERLEVEL10K_COMMIT}"
 rm -rf "${ROOTFS}/usr/share/zsh-theme-powerlevel10k/.git" 2>/dev/null || true
-git clone --depth 1 https://github.com/zsh-users/zsh-history-substring-search.git "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search" 2>/dev/null || true
+clone_pinned https://github.com/zsh-users/zsh-history-substring-search.git "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search" "${HISTORY_SUBSTRING_COMMIT}"
+rm -rf "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search/.git" 2>/dev/null || true
 rm -rf "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search/.git" 2>/dev/null || true
 
 # .zshrc and .p10k.zsh come from rootfs/overlay/home/nabu/ (copied at line 92).

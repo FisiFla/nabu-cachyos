@@ -1,564 +1,279 @@
 # CachyOS Nabu
 
-CachyOS ARM for the **Xiaomi Pad 5 (nabu)** — the first CachyOS on an ARM tablet.
-
-## Easy Install (No Building Required)
-
-Download the [latest release](https://github.com/FisiFla/nabu-cachyos/releases/latest), then:
-
-1. Download **all files** from the release into one folder
-2. **Rename the root partition** (one-time, from Android — see [Partition relabel](#partition-relabel-userdata--linux)):
-   `bash relabel-partition.sh`
-3. Boot tablet into fastboot: **Vol Down + Power**
-4. Run: `bash join-and-flash.sh`
-5. CachyOS boots in ~60 seconds with GNOME touch UI and the on-screen keyboard enabled by default
-
-Requirements: unlocked bootloader, USB-C cable, `fastboot` and `zstd` installed.
-`adb` with root access on the tablet is needed for step 2 (the partition rename).
-Optional: Docker running locally enables automatic SSH key injection into the image during flash.
+CachyOS ARM for the **Xiaomi Pad 5 (nabu)** — Arch Linux ARM + GNOME on Wayland,
+running on the mainline-derived nabu kernel with CachyOS tuning.
 
 ---
 
-## Building From Source
+## What this is
 
-This repo also contains a Docker-based build system to produce the image from scratch.
+- **Arch Linux ARM** rootfs, bootstrapped with `pacstrap` inside Docker
+- **Kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (`nabu/7.3.y`) plus the CachyOS config fragment (1000 Hz, full preemption, Btrfs, zram/zstd, THP)
+- **GNOME Shell 51 on Wayland** with a working on-screen keyboard, CachyOS theming and dconf tuning
+- **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity, USB serial console
+- **Supported by the kernel, not yet verified end to end:** quad speakers (CS35L41), charger, Iris video decode, magnetic keyboard/cover, suspend/resume
+- **Tablet UX:** GDM auto-login, no lock screen, tablet-sized UI, power button ignored on short press (long press still powers off)
+- `paru` + the CachyOS tool set (`cachyos-settings`, wallpapers, Plymouth animation, zsh/fish configs, Alacritty)
+- **Direct boot** — Android bootimg format, no GRUB, no UEFI
 
-## What This Is
+## What this is not
 
-- **Arch Linux ARM** base system bootstrapped via `pacstrap` inside Docker
-- **CachyOS kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (branch `nabu/7.3.y`, the tree the working XDA dual-boot builds use) with the CachyOS config fragment: 1000Hz timer, full preemption, Btrfs, zram/zstd, THP
-- **GNOME Shell** desktop on Wayland with **working on-screen keyboard** for touch input
-- **CachyOS GNOME settings** (dark theme, CachyOS wallpapers, dconf tuning)
-- **CachyOS theming and tools** built from PKGBUILDs, including `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, and `cachyos-packageinstaller`
-- **Full zsh stack**: oh-my-zsh, powerlevel10k, zsh-syntax-highlighting, zsh-autosuggestions, fzf
-- **Firefox + Vivaldi** browsers (Vivaldi via AUR aarch64 pre-built binaries)
-- **`paru` AUR helper** pre-installed (`paru-bin`) so users can install AUR packages without bootstrapping `makepkg` first
-- **Alacritty** terminal with CachyOS config
-- **Working audio** with nabu UCM profiles
-- **Dynamic CPU governor** (performance when charging, schedutil on battery)
-- **`ananicy-cpp`** auto-renicer enabled at boot — keeps the UI responsive when heavy background tasks (e.g. AUR rebuilds) are running
-- **MGLRU** enabled via tmpfiles for improved memory management
-- **ADIOS I/O scheduler** set via udev rules
-- **CachyOS branding**: custom `os-release`, fastfetch logo, Plymouth boot animation
-- **USB serial debug console** over USB-C — **opt-in**: `sudo nabu-serial-gadget enable` starts an ACM serial console on `/dev/ttyGS0`; `sudo nabu-serial-gadget disable` turns it off again
-- **Direct boot** via Android boot.img format (CachyOS kernel + DTB, no GRUB)
-- WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
-- Auto-login via GDM, connect to WiFi via GNOME Settings (touch-friendly)
-- **First-run welcome dialog** (`nabu-welcome`) — touch-friendly GTK4 app that runs once on first login with shortcuts to set a password (none by default), install apps, and read the README
-- **Tablet-style power button** — short press does nothing, long press still powers off (instead of systemd's default "every press powers off"). The shipped `logind.conf.d/50-power-button.conf` uses `HandlePowerKey=ignore`; see Known Limitations for why suspend is not wired to the short press.
-- **`qbootctl` mark-boot-successful** — runs once after multi-user.target so the bootloader's A/B retry counter resets cleanly on every successful boot (slot B no longer drifts toward unbootable)
-- **NTP at boot** (`systemd-timesyncd`) — fixes the RTC drifting to year 2063 on cold boot, which breaks every SSL cert and pacman signature check
+- **Not a port of CachyOS x86.** Most CachyOS packages are x86-only; only the architecture-neutral kernel/settings work is applied.
+- **Not a prebuilt kernel.** `boot.img` is always compiled from source during the build.
+- **Not tied to one install style.** You can replace Android (partition rename) *or* keep it side by side (partition carve). See [Installing](#installing).
 
-## What This Is NOT
+---
 
-- **Not a port of CachyOS x86.** Most CachyOS packages are x86-only. This project uses a nabu-specific kernel and applies only the architecture-neutral CachyOS kernel tweaks.
-- **Not using a pre-built kernel.** The kernel is compiled from source with the CachyOS config fragment layered on top of the nabu defconfig. The `boot.img` contains a kernel built here, never a downloaded one.
-- **Not a dual-boot setup.** This overwrites the Android userdata partition. The Android slot (slot A) is preserved as a fallback.
+## Installing
 
-## Prerequisites
+Two install paths. Both start from a **release bundle** (or your own build) and an
+**unlocked bootloader**.
 
-| Requirement | Details |
+### 0. Get the files
+
+Download every asset from the [latest release](https://github.com/FisiFla/nabu-cachyos/releases/latest)
+into one folder (or build your own — see [Building](#building)).
+
+You need on the host: `fastboot`, `zstd`, `adb`, and on macOS `simg2img`
+(`brew install android-platform-tools zstd simg2img`).
+
+### 1. Prepare the partition table (choose one)
+
+The kernel boots with `root=PARTLABEL=linux`, but the stock Xiaomi table calls
+that partition `userdata`. Both options below rewrite the GPT with
+`tools/gpt-*.py` (both GPT copies, fresh CRC32s, verified by re-reading the
+table). The tablet must be in **Android with root** for the relabel, or in a
+**root-capable recovery** (TWRP booted with `fastboot boot`) / rooted ROM for the
+carve. Nothing about the carve touches Android's own partitions.
+
+**Option A — replace Android** (simplest, keeps nothing from Android):
+
+```bash
+bash relabel-partition.sh          # renames userdata -> linux in place
+```
+
+**Option B — keep Android (dual boot)**:
+
+```bash
+bash carve-linux-partition.sh --dry-run   # show the plan
+bash carve-linux-partition.sh             # carve 30 GiB: --gib 50 for more
+```
+
+The carve shortens `userdata` and appends a new `linux` partition out of its
+tail. The stock table has no free space, so this is the only way to keep
+Android. Both GPT regions are saved as `*-pristine.bin` first, so the operation
+is reversible.
+
+> `userdata` is block-encrypted and was sized for the whole disk. Our test
+> device kept all its data after the carve, but Android may also decide the
+> resized partition is unusable and format it on the next boot. Back up what
+> you care about first — the ROM and Magisk survive either way.
+
+### 2. Flash
+
+Boot the tablet into fastboot (**Vol Down + Power**), then:
+
+```bash
+bash join-and-flash.sh      # splits release bundle; or `bash flash.sh` when unsplit
+```
+
+The installer verifies `SHA256SUMS`, checks that a `linux` partition exists and
+is large enough, erases `dtbo_b`, flashes `vbmeta_disabled.img`, `boot.img` to
+`boot_b`, decompresses and flashes the rootfs, sets slot B active and reboots.
+
+CachyOS boots in about a minute.
+
+Optional SSH key injection (needs Docker locally) puts your `~/.ssh/id_ed25519.pub`
+into the image before flashing:
+
+```bash
+SSH_PUBKEY_FILE=~/.ssh/id_ed25519.pub bash flash.sh
+SKIP_SSH_KEY_INJECTION=1 bash flash.sh     # skip it
+```
+
+### 3. First boot
+
+- Auto-login as `nabu` (no password, passwordless `sudo`)
+- Connect to WiFi in GNOME Settings — touch-friendly, no keyboard needed
+- `ssh nabu@nabu-cachyos.local` (key-only by default; see [SSH](#ssh))
+
+### Switching between the two systems (dual boot only)
+
+There is no boot menu; nabu boots the *active slot*.
+
+| Direction | Commands |
 |---|---|
-| Build machine | macOS Apple Silicon (Docker runs natively), Linux aarch64, **or Linux x86_64** (the build cross-compiles the kernel via `aarch64-linux-gnu-gcc` + `ccache` to avoid qemu emulation on x86) |
-| Docker | Via [Colima](https://github.com/abiosoft/colima) on macOS, or Docker Desktop / native Docker on Linux |
-| Disk space | ~15 GB for build artifacts + Docker image |
-| Xiaomi Pad 5 | Bootloader must be unlocked |
-| USB-C cable | Direct connection between build machine and tablet |
-| fastboot / adb | `brew install android-platform-tools` on macOS |
-| `simg2img` | macOS only, flash only: `release/flash.sh` converts sparse images with it. The bundled `linux.img.zst` exceeds 256 MB and ships sparsed, so you need it before flashing: `brew install simg2img` |
-| Root access on the tablet | Needed once for the [partition relabel](#partition-relabel-userdata--linux) (Magisk, or any root solution that provides `su`) |
-| vbmeta_disabled.img | Required to disable Android Verified Boot. The repo does not fetch it automatically; copy it into `output/` or point `release/create-release.sh` at it with `VBMETA_SOURCE=...` |
+| CachyOS → Android | `sudo qbootctl -s a` then `sudo reboot` |
+| Android → CachyOS | `adb reboot bootloader` · `fastboot set_active b` · `fastboot reboot` |
 
-## Quick Start
+A slot that fails to boot a few times is marked unbootable by the bootloader and
+the other slot is used, so a broken install falls back instead of looping.
+
+### Rolling back
+
+- **Android**: `fastboot set_active a` (or the bootloader's own fallback).
+- **Old kernel/rootfs**: keep the previous `boot.img` and reflash it to `boot_b`.
+- **Partition table**: write the saved `*-pristine.bin` regions back, or run the
+  relabel in reverse (`NABU_OLD_LABEL=linux NABU_NEW_LABEL=userdata`).
+
+---
+
+## Building
 
 ```bash
-# 1. Build boot.img + linux.img.zst
-./build.sh
-
-# 2. Package a local release bundle
+./build.sh                                        # ~40-60 min cold, minutes warm
 VBMETA_SOURCE=/path/to/vbmeta_disabled.img bash release/create-release.sh
-
-# 3. Flash (tablet must be in fastboot mode: hold Vol Down + Power)
-bash release/dist/join-and-flash.sh
+cd release/dist && bash join-and-flash.sh         # or flash.sh
 ```
 
-**Optional:** Pre-configure WiFi for headless/SSH access:
-```bash
-WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
-```
-
-## Build Process
-
-`build.sh` orchestrates six stages, all running inside a Docker container built from the Arch Linux ARM rootfs tarball:
+`build.sh` runs six stages in a Docker container built from the Arch Linux ARM
+tarball:
 
 | Stage | Script | What it does |
 |---|---|---|
-| 1/6 | `build.sh` | Downloads the ALARM rootfs tarball over HTTPS and verifies its GPG signature |
-| 2/6 | `build.sh` | Builds Docker image from `Dockerfile` + ALARM tarball |
-| 3/6 | `firmware/fetch-firmware.sh` | Clones [nabu firmware blobs](https://github.com/map220v/nabu-firmware) (WiFi, GPU, BT, audio) |
-| 4/6 | `kernel/build-kernel.sh` | Clones the nabu kernel tree (`Kumar-Jy/linux` `nabu/7.3.y`), applies the CachyOS patches that still apply, compiles `Image.gz` + DTB + modules |
-| 5/6 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
-| 6/6 | `image/build-image.sh` | Creates the fastboot-flashed ext4 rootfs image (`linux.img.zst`) and checksums |
+| 1/6 | `build.sh` | Downloads the ALARM rootfs over HTTPS and verifies its GPG signature |
+| 2/6 | `build.sh` | Builds the Docker image |
+| 3/6 | `firmware/fetch-firmware.sh` | Fetches pinned nabu firmware blobs |
+| 4/6 | `kernel/build-kernel.sh` | Clones/patches the kernel, builds `Image.gz` + DTB + modules, assembles `boot.img` |
+| 5/6 | `rootfs/build-rootfs.sh` | `pacstrap`, packages, Qualcomm userspace, patched `iio-sensor-proxy`, theming, system config |
+| 6/6 | `image/build-image.sh` | Builds the ext4 rootfs image and checksums |
 
-**Rootfs tarball integrity:** the ALARM tarball is the base of the entire OS, so stage 1 downloads it over HTTPS (`https://ca.us.mirror.archlinuxarm.org`) together with the publisher's detached GPG signature and verifies it with `tools/verify-alarm-tarball.sh`. The publisher keyring is extracted from the tarball itself, and the **primary key fingerprint is pinned in the repository** (`68B3537F39A313B3E574D06777193F152BDBE6A6`, "Arch Linux ARM Build System") — a swapped keyring or a mirrored download cannot change the verdict. The build fails closed on a bad signature. Use `ALARM_MIRROR=<url>` to fetch from another mirror, or `ALARM_ALLOW_UNVERIFIED=1` to downgrade to a warning on an air-gapped machine that already trusts its local copy.
+Useful switches:
 
-**Kernel branch vs release:** the kernel source is selected by `KERNEL_URL` + `KERNEL_REF` (defaults: `https://github.com/Kumar-Jy/linux.git` and `nabu/7.3.y`); `KERNEL_VERSION` is now only a label (default `7.3-nabu`). The old tree remains available with `KERNEL_URL=https://gitlab.com/sm8150-mainline/linux.git KERNEL_REF=sm8150/6.17-wifi-fix KERNEL_DEFCONFIG=defconfig`. The real release string is derived by the kernel build (`make kernelrelease`) and recorded in `output/kernel/kernel-release`; the rootfs stage uses it for `/lib/modules`, the kernel image name and the mkinitcpio preset, so the kernel and the rootfs can no longer disagree about it. Kernel config comes from `KERNEL_DEFCONFIG` (`nabu_defconfig`, which already folds in the sm8150 fragment) plus any files in `KERNEL_FRAGMENTS` plus `kernel/cachyos.config`.
+| Variable | Default | Purpose |
+|---|---|---|
+| `KERNEL_URL` / `KERNEL_REF` | `Kumar-Jy/linux` · `nabu/7.3.y` | Kernel tree and branch (`KERNEL_COMMIT` pins a commit) |
+| `KERNEL_DEFCONFIG` / `KERNEL_FRAGMENTS` | `nabu_defconfig` · `sm8150.config` | Kernel config |
+| `WIFI_SSID` / `WIFI_PASSWORD` | — | Pre-seed a WiFi profile |
+| `VBMETA_SOURCE` | — | Path to `vbmeta_disabled.img` for release packaging |
 
-**Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`) and built kernel artifacts (`output/kernel/`) persist between builds on every platform. The compiler cache and kernel tree differ by platform: on **Linux x86_64** (host cross-compile path) they live in `.cache/kernel-build-<KERNEL_REF>/` and `.cache/ccache/`; inside **Docker** (the default macOS path) they live in the named volumes `nabu-kernel-build` (kernel source tree) and `nabu-ccache` — `docker volume rm nabu-kernel-build` and/or `nabu-ccache` force a full kernel rebuild. The previous behavior (kernel built in a throwaway container `/tmp`) rebuilt the kernel from scratch every time; delete the volumes if disk space matters more than the next build's speed.
+**Kernel release string** is derived by the build (`make kernelrelease`, e.g.
+`7.3.0-sm8150+`) and recorded in `output/kernel/kernel-release`; the rootfs uses
+the same string for `/lib/modules`, the kernel image name and the initramfs, so
+kernel and rootfs can never disagree.
 
-**Host kernel cross-compile (Linux x86_64 only):** When `aarch64-linux-gnu-gcc` and `mkbootimg` are present, `build.sh` builds the kernel natively on the host before launching Docker (stage 2.5/6). This skips qemu-aarch64 emulation entirely and brings the kernel compile from ~2 hours down to ~10-15 minutes. Force the legacy in-container path with `USE_HOST_KERNEL_BUILD=0`.
+**Caches:** pacstrap rootfs tarball and `output/kernel/` persist across builds.
+Docker builds also keep the kernel tree and ccache in the named volumes
+`nabu-kernel-build` and `nabu-ccache` (`docker volume rm …` forces a rebuild).
 
-**CachyOS theming** is built from [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS) and includes: `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white` cursor theme, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`.
+**Integrity:** the ALARM tarball is the base of the whole OS, so it is fetched
+over HTTPS together with the publisher's detached signature and verified by
+`tools/verify-alarm-tarball.sh` against a keyring extracted from the tarball and
+a **fingerprint pinned in the repo**. Bad signature = failed build. Air-gapped
+and trust-me cases can pass `ALARM_ALLOW_UNVERIFIED=1`.
 
-**CachyOS tools** are also built from CachyOS-PKGBUILDS: `cachyos-settings` (sysctl tuning, systemd configs) and `cachyos-alacritty-config`.
+---
 
-## Flash Instructions
-
-The flash process uses **fastboot only** — no recovery, no ADB, no repartitioning. It writes directly to slot B, preserving Android on slot A as a fallback.
-
-If you built from source, create a release bundle first:
-
-```bash
-VBMETA_SOURCE=/path/to/vbmeta_disabled.img bash release/create-release.sh
-cd release/dist
-```
-
-### Prerequisites
-
-- Either:
-  - a packaged release directory containing `join-and-flash.sh`, split `linux.img.zst.part-*`, `boot.img`, and `vbmeta_disabled.img`
-  - or an unsplit directory containing `flash.sh`, `boot.img`, `linux.img.zst`, and `vbmeta_disabled.img`
-- `fastboot` installed (`brew install android-platform-tools` on macOS)
-- `zstd` installed (`brew install zstd` on macOS)
-- `adb` installed and **root access on the tablet** — needed once, for the partition relabel below
-
-### Partition relabel (userdata → linux)
-
-The nabu kernel boots with `root=PARTLABEL=linux`. A stock Xiaomi partition table
-names that partition `userdata`, so the partition name has to be changed once
-before the rootfs can be flashed and mounted. This is GPT surgery: the
-partition name lives in the partition-entry array, and both the array CRC32 and
-the GPT header CRC32 have to be recomputed. **Both** GPT copies (primary at LBA
-1 and the backup at the end of the disk) must be patched, otherwise the
-firmware can fall back to the unpatched copy.
-
-Nothing is repartitioned, no data is moved, and Android slot A is left intact.
-The helper does it for you:
-
-```bash
-# tablet in Android, USB debugging enabled, root available
-bash relabel-partition.sh            # from a release bundle
-bash release/relabel-partition.sh    # from a git checkout
-```
-
-It detects the UFS LUN 0 block device, pulls the primary and backup GPT
-regions, patches the partition name and both CRCs with `tools/gpt-relabel.py`,
-writes them back and verifies the result by reading the table off the device
-again. `--dry-run` shows what would change without writing.
-
-Use it in the reverse direction to undo the rename:
-
-```bash
-NABU_OLD_LABEL=linux NABU_NEW_LABEL=userdata bash relabel-partition.sh
-```
-
-If the tablet's partition is already named `linux`, `flash.sh` detects that and
-skips the check.
-
-**Alternative: dual boot.** If you want to keep the Android install (ROM +
-Magisk + its boot slot) *and* have this OS, don't rename — carve a `linux`
-partition out of the end of `userdata` instead (see
-[Dual boot (carve a linux partition)](#dual-boot-carve-a-linux-partition-keep-android)).
-
-### Dual boot (carve a linux partition, keep Android)
-
-The stock table has no unallocated space — `userdata` runs to the last usable
-LBA — so keeping Android means cutting the new `linux` partition out of the
-**end** of `userdata`. The helper shrinks the userdata entry, appends a new
-`linux` entry and rewrites both GPT copies with fresh CRCs (same surgery
-`tools/gpt-relabel.py` does for the rename; the carve mode is
-`tools/gpt-carve.py`).
-
-**What survives:** the Android ROM, Magisk, its boot slot and (as tested) the
-userdata contents. **What to expect:** `userdata` is block-encrypted and filled
-to its old size, so Android may decide the resized partition is unusable and
-format it on the next boot. Treat app data as at-risk and back up what you
-care about before carving; on our test device the format never happened and
-everything was still there, but that is luck, not a guarantee.
-
-```bash
-# tablet booted into a recovery with root (TWRP) or Android with root:
-bash carve-linux-partition.sh --dry-run   # show the plan, write nothing
-bash carve-linux-partition.sh             # from a release bundle (30 GiB default)
-bash release/carve-linux-partition.sh     # from a git checkout
-bash release/carve-linux-partition.sh --gib 50
-```
-
-It detects the UFS LUN 0 block device, auto-detects the root mode (a recovery
-whose adbd is already root and has no `su` binary, or `su` on a rooted ROM),
-pulls both GPT regions, patches them with `tools/gpt-carve.py` (overlap and
-sliver guards, identical partition GUIDs across both copies), writes them back
-and verifies by reading the table again. Both pre-carve GPT regions are saved
-next to the tool as `*-pristine.bin`, so the carve can be undone by writing
-them back.
-
-Then flash CachyOS to its own slot: `fastboot set_active b`, run
-`flash.sh`/`join-and-flash.sh`, and the installer writes `boot_b` +
-`vbmeta_b` and the carved `linux` partition while Android keeps slot A.
-
-#### Switching between the two systems
-
-There is no boot menu — nabu only switches slots, and the bootloader picks the
-active one. Both directions are one command.
-
-**From CachyOS → Android** (no USB needed, the toolbox is already installed):
-
-```bash
-sudo qbootctl -s a     # make slot A active
-sudo reboot            # next boot is Android
-```
-
-**From Android → CachyOS:**
-
-```bash
-adb reboot bootloader
-fastboot set_active b
-fastboot reboot
-```
-
-The bootloader also counts failed boots: a slot that does not reach a booted
-state after a few attempts is marked unbootable and the other slot is used, so
-a broken install falls back to the working system instead of looping.
-
-#### What we tested (2026-10, nabu, crDroid 12 / Android 16 + Magisk on slot A)
-
-1. TWRP booted with `fastboot boot`, stock GPT pulled and inspected: 32
-   partitions, no free space, `userdata` last.
-2. `carve-linux-partition.sh` (dry run, then for real): `userdata` shortened to
-   ~76 GiB, new `linux` partition of exactly 30 GiB, both GPT copies re-read
-   and CRC-verified.
-3. CachyOS built, flashed to slot B (`set_active b`, `flash.sh`) and booted.
-4. `sudo qbootctl -s a` + reboot → the recovery shown by the bootloader picked
-   slot A, Android booted to the system it had before the carve, **with all
-   its data still present**.
-5. `adb reboot bootloader` → `fastboot set_active b` → `fastboot reboot` →
-   CachyOS back up, same rootfs, same user account.
-
-So the two systems coexist on one tablet, each on its own slot, sharing only
-the 30 GiB `linux` partition. Android's `/data` is now the smaller partition
-and stays Android's; CachyOS never mounts it.
-
-### Step by step
-
-1. **Rename the root partition** (once per device), from Android with root:
-   ```bash
-   bash relabel-partition.sh
-   ```
-   (dual boot instead: `bash carve-linux-partition.sh` — see above.)
-
-2. **Put the tablet in fastboot mode**: hold **Vol Down + Power** until the fastboot screen appears.
-
-3. **Run the installer**:
-   ```bash
-   bash join-and-flash.sh
-   ```
-
-   If you already have an unsplit `linux.img.zst` next to `flash.sh`, you can run:
-
-   ```bash
-   bash flash.sh
-   ```
-
-4. The script will:
-   - Verify that the device actually has a `linux` partition (and stop with a pointer to the relabel step if not)
-   - Erase `dtbo_b` and flash `vbmeta_disabled.img` to `vbmeta_b` (disables Android Verified Boot)
-   - Flash `boot.img` to `boot_b` (CachyOS kernel + DTB)
-   - Decompress `linux.img.zst`, optionally inject your local SSH public key, and flash the `linux` partition (~4 minutes)
-   - Set active slot to B and reboot
-
-5. CachyOS boots in about 60 seconds.
-
-### Optional automatic SSH setup
-
-If Docker is available on the machine running `flash.sh`, the installer will try to inject one local public key from `~/.ssh/` into `/home/nabu/.ssh/authorized_keys` before flashing. That makes the first boot reachable with:
-
-```bash
-ssh nabu@nabu-cachyos.local
-```
-
-Override the key file:
-
-```bash
-SSH_PUBKEY_FILE=~/.ssh/id_ed25519.pub bash release/flash.sh
-```
-
-Skip key injection entirely:
-
-```bash
-SKIP_SSH_KEY_INJECTION=1 bash release/flash.sh
-```
-
-### Recovery / rollback
-
-If the tablet does not boot:
-
-1. Hold **Vol Down + Power** to enter fastboot
-2. Switch back to Android: `fastboot set_active a`
-3. Or reflash with Xiaomi stock ROM
-
-## Default Credentials
+## Credentials and SSH
 
 | Account | Password | Notes |
 |---|---|---|
-| `nabu` | _(none)_ | Auto-login via GDM. Passwordless `sudo` (`NOPASSWD: ALL` in `/etc/sudoers.d/zz-nabu-nopasswd`). Member of `wheel/video/audio/input`. |
-| `root` | _(none)_ | Password hash is `*`: no password can ever authenticate against it, and the account is reported as locked. SSH root login is key-only (`PermitRootLogin prohibit-password`). |
+| `nabu` | none | GDM auto-login, passwordless `sudo` (`/etc/sudoers.d/zz-nabu-nopasswd`), in `wheel/video/audio/input` |
+| `root` | none (`*` hash) | Cannot authenticate with a password; SSH root login is key-only |
 
-**Want a password?** Run `passwd` (no current password needed). To make `sudo` prompt for it, also delete `/etc/sudoers.d/zz-nabu-nopasswd`.
+`passwd` sets a password for `nabu` (for the GNOME lock screen, if you enable
+one). PAM has no `nullok`, so an empty password can never be used to log in.
 
-PAM rejects empty-password login (no `nullok` set), so this combination is safe in practice: GDM auto-logs in without prompting, `sudo` doesn't ask, SSH requires keys.
-
-### SSH authentication
-
-SSH is key-only out of the box. `/etc/ssh/sshd_config.d/nabu.conf` is the single source of truth:
-
-```
-PermitRootLogin prohibit-password
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-PermitEmptyPasswords no
-```
-
-To allow password logins for the `nabu` user (for example once you set a password for the lock screen):
+**SSH is key-only** out of the box (`/etc/ssh/sshd_config.d/nabu.conf`:
+`PermitRootLogin prohibit-password`, `PasswordAuthentication no`,
+`KbdInteractiveAuthentication no`, `PermitEmptyPasswords no`). To allow password
+logins for `nabu`:
 
 ```bash
-sudo nabu-ssh-password on    # writes /etc/ssh/sshd_config.d/10-nabu-password.conf
-sudo nabu-ssh-password off   # back to key-only
+sudo nabu-ssh-password on      # adds 10-nabu-password.conf, restarts sshd
+sudo nabu-ssh-password off
 ```
 
-> **Why root uses `*` and not `passwd -l`** — the `sshd_config` shipped by Arch Linux ARM leaves `UsePAM` at its default of `no`. Without PAM, OpenSSH refuses *key* logins for accounts whose shadow entry is `!`-prefixed, so `passwd -l root` would silently break root-over-SSH. The `*` hash gives the same "no password can ever work" guarantee without that side effect.
+Root uses a `*` hash rather than `passwd -l`, because ALARM's `sshd_config`
+leaves `UsePAM no`: without PAM, OpenSSH refuses *key* logins for `!`-prefixed
+accounts, so `passwd -l root` would break root over SSH.
 
-SSH is enabled by default. Connect after boot:
+---
+
+## Known limitations
+
+- **Camera** — no mainline driver on nabu.
+- **Suspend** — s2idle exists and suspend/resume plumbing (hexagonrpcd stop/start,
+  sensor restart hook) is shipped, but the power-key suspend path is not wired to
+  the button; short press is ignored, long press powers off. Suspend behaviour on
+  the 7.3 kernel is not yet verified end to end.
+- **Warm-reboot black screen** — after `fastboot reboot` the panel occasionally
+  stays dark with no USB; a cold power cycle (hold Power ~15 s) recovers.
+- **`cachyos-packageinstaller`** — its AUR PKGBUILD fails on aarch64; the build
+  skips it. `paru` is the supported way to install packages.
+- **`dbus-broker` → `dbus-daemon`** — the kernel lacks a namespace feature
+  dbus-broker needs.
+- **Pen pressure** — not reported in landscape orientation.
+- **CachyOS kernel patches** — BORE/BBR3/ADIOS/cachy-arm are tuned for
+  kernel 6.16/6.17 and do **not** apply to the 7.3 nabu tree; the build skips
+  them and applies only `kernel/cachyos.config`. Set `KERNEL_URL`/`KERNEL_REF` to
+  the old tree if you want them.
+- **MGLRU / ADIOS / 1000 Hz** — MGLRU, zram/zstd, sysctl and systemd tuning are
+  applied; the ADIOS scheduler is not available on 7.3 (mq-deadline is used).
+
+## Why GNOME
+
+The on-screen keyboard works on Wayland touch devices; KDE's Qt Virtual Keyboard
+has a focus loop that makes it unusable here. GNOME also gives large tap targets
+and gesture navigation for free.
+
+## Hardware notes
+
+- **Sensors** live on the SLPI (`sns_reg` registry on `/mnt/vendor/persist`, served
+  by `hexagonrpcd` over FastRPC → `libssc`/`QRTR` → patched `iio-sensor-proxy`).
+- **Auto-rotation** needs two fixes that ship in the image: the detached keyboard
+  cover exposes phantom pointer devices (which made mutter treat the tablet as a
+  desktop and drop the accelerometer), and the SSC frame is 180° rotated relative
+  to the panel (`ACCEL_MOUNT_MATRIX` on the fastrpc nodes).
+- **Proximity** uses the Xiaomi SAR sensor through a fallback patch, since the SSC
+  registry exposes no standard proximity datatype.
+- **USB serial console** is opt-in: `sudo nabu-serial-gadget enable` exposes an
+  ACM console on `/dev/ttyGS0`.
+
+## Repository layout
+
+```
+build.sh                  # orchestrator (6 stages)
+Dockerfile                # ALARM-based build environment
+firmware/fetch-firmware.sh
+kernel/                   # build-kernel.sh, cachyos.config, patches/, enable-slpi.sh
+rootfs/                   # build-rootfs.sh, build-qualcomm.sh, build-iio-sensor-proxy.sh,
+                          # build-theming.sh, packages*.txt, upstream-pins.sh, overlay/
+image/build-image.sh
+release/                  # create-release.sh, flash.sh, join-and-flash.sh, inject-ssh-key.sh,
+                          # relabel-partition.sh, carve-linux-partition.sh
+tools/                    # gpt-relabel.py, gpt-carve.py, verify-alarm-tarball.sh
+test/                     # QEMU harness (see below)
+docs/                     # hardware reference dumps from a working Android build
+```
+
+## Testing without the tablet (QEMU)
+
+Userspace can be sanity-checked on any Apple Silicon Mac before flashing:
+
 ```bash
-ssh nabu@nabu-cachyos.local    # via mDNS (recommended)
-ssh nabu@<tablet-ip>            # via IP address
+brew install qemu docker colima && colima start
+./test/build-test-kernel.sh         # kernel for QEMU's virt machine
+./test/test-qemu.sh --smoke         # kernel + initramfs
+./test/test-qemu.sh --prepare-only  # GPG-verified ALARM rootfs -> ext4 image
+./test/test-qemu.sh                 # boot the rootfs to a login prompt
 ```
 
-## Known Limitations
+This exercises packages, systemd ordering, sshd and the shells. It cannot test
+nabu hardware (QEMU `-M virt` has no sm8150 devices), so touch, WiFi, audio,
+sensors and the like still need the real tablet.
 
-- **Camera** -- no mainline driver, does not work on any Linux distro for nabu
-- **Auto-rotation** -- the LSM6DSO accelerometer is on I2C bus QUP SE2 (GPIO 126-127), but these pins are reserved by TrustZone secure firmware. Touching them causes the kernel to fail at boot (confirmed: shrinking `gpio-reserved-ranges` drains the A/B retry counter in seconds). The remaining path is the ADSP/SLPI userspace sensor stack (`libssc` + `sns-reg` + a patched `iio-sensor-proxy`) — a separate multi-day project. Manual rotation works fine via Settings → Displays → Orientation.
-- **Suspend** -- s2idle wakes back up within ~1 second of entering it because the `msm_mdss` display controller keeps firing IRQs that the kernel can't mask during shallow suspend (no `deep`/S3 path is exposed on sm8150 mainline — only `[s2idle]` in `/sys/power/mem_sleep`). For this reason the build ships with `HandlePowerKey=ignore` (short press does nothing, long press still powers off). The GNOME top-right menu still has "Suspend" but it will resume itself within seconds. Real suspend needs a kernel-side patch to quiesce the DRM IRQs during s2idle, or proper S3 support upstream.
-- **Warm-reboot black screen** -- `fastboot reboot` and `sudo systemctl reboot` sometimes drop into a black screen with no display + no USB enumeration. Cold-power-cycle recovers (hold Power ~15 sec, then short-press). Cause: panel-init race on warm transition through the bootloader. Cold boot from full power-off is reliable.
-- **`cachyos-packageinstaller`** -- AUR PKGBUILD currently fails on aarch64 against ALARM headers; the build catches and skips it. No alternative GUI installer is shipped right now.
-- **`dbus-broker` replaced with `dbus-daemon`** -- the sm8150 mainline kernel lacks namespace support required by dbus-broker
-- **Pen pressure sensitivity** -- does not work in landscape mode (known upstream issue)
-- **CachyOS kernel patches** -- on the 7.3 nabu tree the CachyOS patch set is best-effort and currently skipped (BORE/BBR3/ADIOS/cachy-arm are version-tuned for 6.16/6.17). The build continues without them; only the config fragment (`kernel/cachyos.config`) applies. On the older 6.17 tree BORE and BBR3 apply.
+## Credits
 
-### Why GNOME instead of KDE?
-
-CachyOS officially offers both KDE and GNOME editions. We chose GNOME for the nabu tablet because:
-
-- **Working on-screen keyboard** -- GNOME's built-in OSK works perfectly on Wayland touch devices. KDE Plasma 6's Qt Virtual Keyboard has a focus-loop bug on Wayland that makes it unusable (the keyboard flashes on/off when it appears).
-- **Touch-friendly out of the box** -- GNOME's UI is designed for touch with large tap targets and gesture navigation.
-- **Proven on nabu** -- TheMojoMan's Ubuntu image (which uses GNOME) was confirmed working on this exact hardware.
-
-### Parity with CachyOS x86
-
-This build achieves roughly **82% parity** with a full CachyOS x86 desktop install:
-
-| Category | Feature | Status |
-|---|---|---|
-| **Kernel** | BORE scheduler v5.9.6 | Applied |
-| | ADIOS I/O scheduler | Skipped (patch conflict — see Known Limitations) |
-| | 1000Hz timer tick | Applied |
-| | Full preemption (PREEMPT) | Applied |
-| | BBR3 TCP | Applied on the 6.17 tree; skipped on 7.3 (mainline BBR is used) |
-| | sched-ext | Config enabled + `scx-scheds` userspace tools shipped (start with `systemctl start scx_lavd`) |
-| **System** | CachyOS sysctl tuning | Full (via cachyos-settings) |
-| | MGLRU | Enabled |
-| | ZRAM zstd compression | Enabled |
-| | systemd tuning (timeouts, limits) | Applied |
-| | Coredump limits | Applied |
-| | Dynamic CPU governor | Custom (charge/battery) |
-| **Desktop** | GNOME Shell 49 + Wayland | Running |
-| | On-screen keyboard | Working (GNOME OSK) |
-| | CachyOS GNOME settings | Applied |
-| | CachyOS wallpapers | Installed |
-| | CachyOS Plymouth animation | Installed |
-| | char-white cursor | Installed |
-| **Shell** | zsh + oh-my-zsh + powerlevel10k | Full |
-| | zsh-syntax-highlighting | Installed |
-| | zsh-autosuggestions | Installed |
-| | fzf | Installed |
-| | CachyOS fish config | Installed |
-| **Apps** | Alacritty + CachyOS config | Installed |
-| | Firefox (Wayland) | Installed |
-| | Vivaldi (Wayland + GPU) | Installed |
-| | btop | Installed |
-| **Packages** | cachyos-settings | Installed |
-| **Branding** | os-release, fastfetch logo | Applied |
-| **N/A** | x86 repo packages (LTO/PGO) | ARM — built from PKGBUILDS |
-| | Proton/Wine gaming | x86 only |
-| | systemd-boot | Direct boot instead |
-| | cachyos-hello | x86 binary — replaced by `nabu-welcome`, a touch-friendly GTK4 first-run dialog |
-| | Multiple kernel variants | Single sm8150 kernel |
-
-## Technical Details
-
-### Boot chain
-
-```
-PBL (ROM) -> XBL -> ABL -> boot.img (CachyOS kernel + DTB, Android bootimg format) -> ext4 rootfs
-```
-
-The boot.img is a direct-boot Android boot image (header v0) containing the CachyOS kernel with DTB appended. Kernel cmdline: `root=PARTLABEL=linux rw`. The rootfs lives on an ext4 partition (`PARTLABEL=linux`). No GRUB or UEFI involved in the actual boot.
-
-The `linux` partition is the stock Android `userdata` partition with its GPT
-entry renamed (see [Partition relabel](#partition-relabel-userdata--linux)) —
-the partition boundaries are unchanged, only the label in the partition table.
-
-### Qualcomm userspace
-
-WiFi on nabu requires Qualcomm userspace that is not available in Arch repos:
-
-- `rmtfs` -- remote filesystem service
-- `tqftpserv` -- TFTP service for firmware loading
-- `libqrtr` -- QRTR userspace library used by those services
-
-These are built from source during the rootfs build stage from their upstream [linux-msm](https://github.com/linux-msm) repositories (all BSD-3-Clause licensed). `qrtr-ns` is intentionally not used because kernel 6.14 provides in-kernel QRTR name service support.
-
-### CachyOS system tuning
-
-Applied via overlay configs in `rootfs/overlay/` and the `cachyos-settings` package:
-
-- **sysctl**: swappiness tuned for ZRAM, reduced vfs_cache_pressure, optimized dirty page settings
-- **ZRAM**: zstd compression, auto-sized via `systemd-zram-generator`
-- **I/O scheduler**: udev rules to set ADIOS (or mq-deadline fallback) per device type
-- **MGLRU**: enabled via tmpfiles (`/etc/tmpfiles.d/mglru.conf`)
-- **systemd**: reduced shutdown timeouts, increased file descriptor limits, journal size capped at 50 MB
-- **CPU governor**: dynamic switching via udev power rules (performance on AC, schedutil on battery)
-- **GDM**: auto-login for user `nabu`
-- **Coredump**: disabled storage to save disk space
-
-### Kernel patches
-
-| Patch | Description | Status |
-|---|---|---|
-| `0001-bore.patch` | BORE CPU scheduler | Critical -- build fails if this doesn't apply |
-| `0002-bbr3.patch` | BBR3 TCP congestion control | Applied on the 6.17 tree; skipped on 7.3 |
-| `0003-adios.patch` | ADIOS I/O scheduler | Best-effort |
-| `0004-cachy-arm.patch` | ARM-compatible bits from CachyOS (HZ options, PREEMPT_LAZY, THP tuning, v4l2loopback) | Best-effort |
-
-## Repository Structure
-
-```
-nabu-cachyos/
-├── build.sh                    # Main build orchestrator
-├── Dockerfile                  # Docker image (ALARM-based build environment)
-├── .dockerignore               # Keeps large local artifacts out of Docker build context
-├── firmware/
-│   └── fetch-firmware.sh       # Downloads nabu firmware blobs
-├── kernel/
-│   ├── build-kernel.sh         # Clones, patches, and compiles the kernel
-│   ├── add-sensors.sh          # Adds LSM6DSO accelerometer to device tree (blocked by TrustZone)
-│   ├── cachyos.config          # CachyOS kernel config fragment
-│   └── patches/                # CachyOS kernel patches (BORE, BBR3, ADIOS, cachy-arm)
-├── rootfs/
-│   ├── build-rootfs.sh         # Bootstraps and configures the rootfs
-│   ├── build-theming.sh        # Builds CachyOS theming packages from PKGBUILDS
-│   ├── build-qualcomm.sh       # Builds qrtr/qmic/rmtfs/tqftpserv/qbootctl/hexagonrpc
-│   ├── build-iio-sensor-proxy.sh # Builds libssc + patched iio-sensor-proxy (SSC/sar)
-│   ├── patches/                # Vendored patches (SSC race condition, sar proximity)
-│   ├── upstream-pins.sh        # Pinned upstream commits for every cloned repo
-│   ├── packages.txt            # Official repo packages to install
-│   ├── packages-aur.txt        # AUR packages (Vivaldi)
-│   ├── pacman-alarm.conf       # Pacman config pointing to ALARM mirrors
-│   ├── mkinitcpio-nabu.preset  # Initramfs generation preset
-│   └── overlay/                # Files copied directly into rootfs
-│       ├── etc/                # System configs (sysctl, ZRAM, GDM, systemd, udev, os-release, UCM audio)
-│       ├── usr/                # UCM audio profiles, USB serial gadget
-│       └── home/nabu/          # User dotfiles and utility scripts
-│           ├── .config/        # GNOME/app configs
-│           ├── .zshrc          # CachyOS zsh config
-│           └── bin/            # Helper scripts (kernel-update, install-containers)
-├── image/
-│   └── build-image.sh          # Creates the flashable linux.img.zst rootfs image
-├── release/
-│   ├── create-release.sh       # Packages output/ into a release-ready dist/ directory
-│   ├── flash.sh                # Flashes an unsplit local image set via fastboot
-│   ├── inject-ssh-key.sh       # Optionally injects a local SSH public key into linux.img
-│   ├── join-and-flash.sh       # Reassembles split rootfs parts, then runs flash.sh
-│   ├── relabel-partition.sh    # Renames the GPT partition userdata -> linux
-│   └── carve-linux-partition.sh # Dual boot: carves linux out of userdata's tail
-├── tools/
-│   ├── gpt-relabel.py          # Patches the GPT partition name and both CRCs
-│   ├── gpt-carve.py            # Carves a new partition out of another one's tail
-│   └── verify-alarm-tarball.sh # GPG-verifies the downloaded ALARM rootfs tarball
-├── test/
-│   ├── build-test-kernel.sh    # Builds a QEMU-virt kernel from the same source tree
-│   ├── build-smoke-initramfs.sh# Tiny Alpine initramfs for the QEMU smoke test
-│   ├── test-qemu.sh            # Boots kernel(+initramfs / +rootfs) under QEMU locally
-│   └── log/                    # Serial transcripts (gitignored)
-└── output/                     # Build artifacts (boot.img, linux.img.zst, checksums, kernel/, firmware/)
-```
-
-## Testing on your Mac (QEMU)
-
-Before you touch the tablet, you can sanity-check the userspace side of the
-OS on its own -- packages, systemd units, **sshd**, shells, boot ordering --
-by booting it under QEMU on your Mac. Nothing is installed on the host beyond
-QEMU and Docker (both via Homebrew); every build step runs in a container.
-
-```
-brew install qemu docker colima
-colima start                       # if the docker daemon is not running
-
-./test/build-test-kernel.sh        # ~10-40 min: kernel for QEMU's virt machine
-./test/test-qemu.sh --smoke        # layer 1: kernel boots, initramfs works
-./test/test-qemu.sh --prepare-only # downloads ArchLinuxARM base rootfs (GPG-
-                                   # verified with tools/verify-alarm-tarball.sh)
-                                   # and turns it into a 4 GB ext4 image
-./test/test-qemu.sh                # layer 2: boots that rootfs to a login prompt
-```
-
-Pass `--kernel <Image>` / `--rootfs <img>` to test other artifacts, `--accel tcg`
-on non-Apple-Silicon hosts, and `--timeout <seconds>` to change the watchdog.
-Serial transcripts are written to `test/log/`.
-
-What the `test/` kernel is: the same sm8150-mainline/6.17 source, built with
-`make virtconfig` (the kernel's own virtualization-guest config: virtio,
-PL011 serial, generic PCI host; SoC drivers dropped). It is a plain arm64
-`Image`, not the tablet's `Image.gz`+DTB `boot.img`, and it is never flashed.
-
-What this CAN test: the rootfs contents. All userspace -- package sets,
-service ordering, sshd config, login shells, filesystem integrity.
-
-What this CANNOT test: the tablet's hardware. QEMU's `-M virt` is a generic
-ARM virtual machine with no sm8150 DTS, so WiFi (WCN3991), the touchscreen,
-audio (SLPI/UCM), battery, and every other qcom peripheral are absent. Those
-still require the real device.
-
-Two deliberate differences vs the tablet boot, both correct here by design:
-
-- `root=/dev/vda` instead of `root=PARTLABEL=linux`: that partition label
-  comes from the Android GPT of the flashed device; the QEMU disk is a
-  plain ext4 image with no partition table.
-- `console=ttyAMA0` instead of the tablet's USB-serial gadget: ttyAMA0 is
-  the QEMU virt PL011 serial port.
-
-## Credits and Attribution
-
-This project would not be possible without the work of these projects and people:
-
-- **[TheMojoMan](https://github.com/TheMojoMan/xiaomi-nabu)** -- Boot.img and UEFI firmware for nabu.
-- **[linux-msm](https://github.com/linux-msm)** -- Qualcomm userspace daemons (qrtr, rmtfs, tqftpserv) built from source for WiFi support.
-- **[Kumar-Jy/linux](https://github.com/Kumar-Jy/linux)** -- Xiaomi Pad 5 (nabu) kernel tree (`nabu/7.3.y`): touch, speakers, Iris video decode, charger, deep sleep, keyboard/hall, stylus charger.
-- **[sm8150-mainline](https://gitlab.com/sm8150-mainline/linux)** -- Mainline Linux kernel with Snapdragon 855 (sm8150) support; the previous kernel base (still selectable with `KERNEL_REF`).
-- **[CachyOS](https://cachyos.org/)** -- Kernel patches (BORE, BBR3, ADIOS), theming packages, system tuning configs, and PKGBUILD recipes via [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS).
-- **[map220v](https://github.com/map220v/nabu-firmware)** -- Nabu-specific firmware blobs (WiFi WCN3991, Adreno 640 GPU, Bluetooth, audio codec) required for hardware functionality.
-- **[Arch Linux ARM](https://archlinuxarm.org/)** -- The base system and package repositories.
-- **[nabu Linux community](https://t.me/nabulinux)** -- Collective knowledge, testing, and documentation for running Linux on the Xiaomi Pad 5.
+- [TheMojoMan](https://github.com/TheMojoMan/xiaomi-nabu) — boot image format and early nabu work
+- [Kumar-Jy/linux](https://github.com/Kumar-Jy/linux) — nabu kernel tree
+- [linux-msm](https://github.com/linux-msm) — qrtr, rmtfs, tqftpserv, qbootctl, hexagonrpc
+- [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) — previous kernel base
+- [CachyOS](https://cachyos.org/) and [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS) — tuning, theming, PKGBUILDs
+- [map220v](https://github.com/map220v/nabu-firmware) — nabu firmware blobs
+- [Arch Linux ARM](https://archlinuxarm.org/) — base system
+- [nabu Linux community](https://t.me/nabulinux) — knowledge and testing
 
 ## License
 
-This project is licensed under the [GPL-2.0](LICENSE), matching the Linux kernel. The components downloaded and assembled during the build are subject to their own respective licenses (GPL for the kernel, BSD-3 for Qualcomm userspace tools, various licenses for CachyOS packages, etc.).
+GPL-2.0 (see [LICENSE](LICENSE)); bundled components keep their own licenses.

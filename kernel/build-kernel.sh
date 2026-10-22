@@ -18,7 +18,6 @@ OUTPUT_DIR="${OUTPUT_DIR:-/build/output/kernel}"
 BOOT_IMG_OUT="${BOOT_IMG_OUT:-/build/output/boot.img}"
 
 BOOT_CMDLINE="${BOOT_CMDLINE:-root=PARTLABEL=linux rw}"
-ENABLE_EXPERIMENTAL_SENSORS="${ENABLE_EXPERIMENTAL_SENSORS:-0}"
 
 # Cross-compile knobs (default empty → native compile, matching the
 # previous in-container arm64 path). build.sh sets these when running
@@ -138,8 +137,8 @@ if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
     # KERNEL_CRITICAL_PATCHES="" to make every patch best-effort.
     # NAS-218 / NAS-247: the fastrpc INIT_CREATE_STATIC pageslen fix is critical
     # on 6.17 — without it, SLPI sensorspd PD-create fails with EPIPE and the
-    # entire sensor stack stays dead (the I2C path is TrustZone-blocked, see
-    # add-sensors.sh). The 7.3 tree reworked that path, so it is optional there.
+    # entire sensor stack stays dead. The 7.3 tree reworked that path, so it is
+    # optional there (the build uses attach mode).
     # shellcheck disable=SC2206  # deliberate word splitting of a space-separated list
     # Note: ${VAR-default} (no colon) so an explicit empty value means "no critical patches".
     CRITICAL_PATCHES=(${KERNEL_CRITICAL_PATCHES-0001-bore 0005-fastrpc-fix-init-create-static-pageslen})
@@ -185,18 +184,6 @@ if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
         fi
     done
     echo "${EXPECTED_SENTINEL}" > "${PATCH_SENTINEL}"
-fi
-
-# Apply optional device tree modifications.
-# nabu's TrustZone firmware reserves GPIO 126-127; changing that range
-# is known to cause boot failure, so keep the direct-I2C sensor DTS hack
-# opt-in. The SLPI path below bypasses this entirely — sensors are driven
-# by the SLPI co-processor over QRTR, not by the AP's I2C controller.
-if [ "${ENABLE_EXPERIMENTAL_SENSORS}" = "1" ] && [ -x "${SCRIPT_DIR}/add-sensors.sh" ]; then
-    echo "Adding experimental sensor support to device tree..."
-    bash "${SCRIPT_DIR}/add-sensors.sh"
-else
-    echo "Skipping experimental sensor DTS modifications."
 fi
 
 # NAS-218: enable the Sensor Low-Power Island remoteproc. Mandatory now —

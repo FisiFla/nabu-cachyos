@@ -73,6 +73,7 @@ strace
 sudo
 ttf-fantasque-nerd
 ttf-fira-sans
+ttf-dejavu
 vim
 wget
 wireplumber

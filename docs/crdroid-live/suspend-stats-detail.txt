@@ -1,1 +1,0 @@
-cat: /sys/power/suspend_stats: Is a directory

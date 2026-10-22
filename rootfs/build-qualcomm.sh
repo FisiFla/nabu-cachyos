@@ -89,26 +89,18 @@ DESTDIR="${ROOTFS}" meson install -C builddir
 # Ships three templated systemd units (only the adsp ones are useful on
 # sm8150 nabu — there is no separate SDSP):
 #   hexagonrpcd-adsp-rootpd.service     — root process domain
-#   hexagonrpcd-adsp-sensorspd.service  — sensors process domain (SLPI)
-#   hexagonrpcd-sdsp.service            — gated off (no /dev/fastrpc-sdsp)
-# build-rootfs.sh enables the first two.
+#   hexagonrpcd-adsp-rootpd.service     — gated off when /dev/fastrpc-sdsp exists
+#   hexagonrpcd-adsp-sensorspd.service  — gated off likewise
+#   hexagonrpcd-sdsp.service            — the SLPI sensors bridge on 7.3 (attach mode)
+# build-rootfs.sh enables all three and lets the unit conditions pick.
 # hexagonrpc is pinned in rootfs/upstream-pins.sh.
 echo "  [6/6] Building hexagonrpc (sensors FastRPC bridge)..."
 cd "${BUILD_DIR}"
 clone_pinned https://github.com/linux-msm/hexagonrpc.git hexagonrpc "${HEXAGONRPC_COMMIT}"
 cd hexagonrpc
-# NAS-247: apply our local patch that adds the `-S NAME` option →
-# FASTRPC_IOCTL_INIT_CREATE_STATIC. Without it, hexagonrpcd can only
-# INIT_ATTACH or INIT_ATTACH_SNS, neither of which work for nabu's SLPI
-# sensorspd which needs the static-PD-create path. See
-# tools/hexagonrpc-add-create-static.patch.
-HEXAGONRPC_PATCH=/build/tools/hexagonrpc-add-create-static.patch
-if [ -f "${HEXAGONRPC_PATCH}" ]; then
-    echo "    Applying hexagonrpc-add-create-static.patch..."
-    git apply "${HEXAGONRPC_PATCH}"
-else
-    echo "    WARNING: ${HEXAGONRPC_PATCH} missing — building unpatched hexagonrpcd."
-fi
+# Unpatched: the SLPI sensor domain is reached in attach mode (`-s`,
+# INIT_ATTACH_SNS), so the old local patch that added `-S NAME` /
+# FASTRPC_IOCTL_INIT_CREATE_STATIC is no longer needed or applied.
 meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
 DESTDIR="${ROOTFS}" meson install -C builddir

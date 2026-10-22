@@ -2,6 +2,12 @@
 
 Captured live from crDroid Android 16 (v12.10, kernel `4.14.357-perf-g3d4420cd4e65`, sm8150 downstream) running on the same Xiaomi Pad 5 we target with CachyOS. Use this as the canonical "what's needed to make X work" reference when porting subsystems to mainline.
 
+> **Status (2026-10): historical context.** This snapshot predates the move to
+> [Kumar-Jy/linux](https://github.com/Kumar-Jy/linux) `nabu/7.3.y`. Most of the
+> gaps described below are closed by that tree: touch, pen, speakers, charger,
+> video decode, keyboard/hall and the SLPI sensor stack all work. Kept for the
+> downstream-vs-mainline reasoning and the GPT notes in section 5.
+
 **Big picture**: nearly every "broken on CachyOS" feature works on crDroid because crDroid runs the **downstream Qualcomm 4.14 kernel** with all the proprietary drivers + Qualcomm userspace. Our CachyOS runs **mainline kernel 6.17 (sm8150-mainline)** which has *partial* hardware enablement upstream. The deltas below describe what each subsystem needs.
 
 How to switch between the two on the tablet:

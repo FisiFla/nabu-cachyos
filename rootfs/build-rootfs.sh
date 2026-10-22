@@ -213,6 +213,10 @@ sed "s|\${KERNEL_RELEASE}|${KERNEL_RELEASE}|g" "${SCRIPT_DIR}/mkinitcpio-nabu.pr
 # 7. Build AUR packages
 # Use pacman -U with --root to install directly (avoids arch-chroot sandbox issues)
 echo "Building AUR packages..."
+# makepkg -s installs build deps into THIS container with --noconfirm, but
+# pacman still asks "which provider of ttf-font?" interactively. Install a
+# concrete provider first so the transaction has nothing to ask about.
+pacman -S --needed --noconfirm ttf-dejavu >/dev/null
 AUR_BUILD="/tmp/aur-build"
 mkdir -p "${AUR_BUILD}"
 chown builder:builder "${AUR_BUILD}"
@@ -242,7 +246,9 @@ for pkg in "${aur_packages[@]}"; do
     }
     cd "${AUR_BUILD}/${pkg}"
     # makepkg must run as non-root; -s installs deps via sudo
-    sudo -u builder makepkg -s --noconfirm || {
+    # stdin=/dev/null: a virtual-package provider prompt must fail fast,
+    # not hang the whole build waiting for input nobody can type.
+    sudo -u builder makepkg -s --noconfirm </dev/null || {
         echo "  WARNING: makepkg failed for ${pkg}, skipping"
         continue
     }

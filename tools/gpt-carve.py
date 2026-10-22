@@ -26,10 +26,20 @@ Partial dump (one GPT region pulled off the device):
 Reference: docs/crdroid-reference-2026-05-24.md section 5.
 """
 import argparse
+import importlib.util
 import struct
 import sys
 import uuid
 import zlib
+from pathlib import Path
+
+# The shared machinery lives in `gpt-relabel.py` (a HYPHEN in the filename,
+# so it cannot be imported by module name). Load its file explicitly instead.
+_spec = importlib.util.spec_from_file_location(
+    "gpt_relabel", str(Path(__file__).resolve().with_name("gpt-relabel.py")))
+_gpt_relabel = importlib.util.module_from_spec(_spec)
+sys.modules["gpt_relabel"] = _gpt_relabel
+_spec.loader.exec_module(_gpt_relabel)
 
 from gpt_relabel import (
     ENTRY_NAME_OFFSET, GptDevice, GptError, OFF_ARRAY_CRC, OFF_HEADER_CRC,

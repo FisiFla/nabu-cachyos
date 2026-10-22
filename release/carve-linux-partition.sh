@@ -118,24 +118,26 @@ fi
 
 # adb joins its arguments with spaces before handing them to the device
 # shell, so the whole device command stays ONE shell-string argument
-# (device-side commands here contain no single quotes).
+# (device-side commands here contain no single quotes). exec-out merges the
+# device-side stderr into the data stream, so every command redirects its
+# stderr on the device (2>/dev/null) or dd's summary bytes corrupt the pulls.
 dev_exec() {
     if [ "${ROOT_MODE}" = "adb" ]; then
-        adb shell "${1}" 2>/dev/null
+        adb shell "${1} 2>/dev/null"
     else
-        adb shell "su -c '${1}'" 2>/dev/null
+        adb shell "su -c '${1} 2>/dev/null'"
     fi
 }
 
 dev_data() {   # like dev_exec, but for binary output
     if [ "${ROOT_MODE}" = "adb" ]; then
-        adb exec-out "${1}" 2>/dev/null
+        adb exec-out "${1} 2>/dev/null"
     else
-        adb exec-out "su -c '${1}'" 2>/dev/null
+        adb exec-out "su -c '${1} 2>/dev/null'"
     fi
 }
 
-log "adb device: $(dev_exec get-serialno | tr -d '\r')"
+log "adb device: $(adb get-serialno 2>/dev/null | tr -d '\r')"
 
 # --- find the UFS LUN 0 block device ---------------------------------------
 has_gpt_signature() {

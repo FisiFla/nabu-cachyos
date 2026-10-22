@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck if missing
+        run: |
+          command -v shellcheck >/dev/null 2>&1 || {
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          }
+          shellcheck --version
+
+      # Every tracked shell script must parse cleanly.
+      - name: bash -n (syntax check)
+        run: |
+          while IFS= read -r f; do
+            echo "::syntax $f"
+            bash -n "$f"
+          done < <(git ls-files '*.sh' 'build.sh')
+
+      # Style gate: the repo currently passes -S style with zero findings.
+      # If you find a false positive, silence it in the file with a pinned
+      # `# shellcheck disable=SCxxxx` comment rather than lowering this bar.
+      - name: shellcheck (style)
+        run: |
+          status=0
+          while IFS= read -r f; do
+            echo "::shellcheck $f"
+            shellcheck -x -S style "$f" || status=1
+          done < <(git ls-files '*.sh' 'build.sh')
+          exit "$status"
+
+      - name: Commit pins look like commit hashes
+        run: |
+          bad=0
+          while IFS= read -r line; do
+            val="$(sed 's/^[^"]*"\([^"]*\)".*/\1/' <<<"${line}")"
+            echo "::pin ${val}"
+            [[ "${val}" =~ ^[0-9a-f]{40}$ ]] || { echo "malformed pin: ${line}"; bad=1; }
+          done < <(grep -h '_COMMIT=' rootfs/upstream-pins.sh)
+          if [ "$bad" -ne 0 ]; then
+            echo "One or more pins are not 40-hex commit hashes — re-collect them against each repo's current HEAD."
+            exit 1
+          fi
+
+      # Python checks: .py files plus bare scripts (they are shipped as
+      # extension-less executables, e.g. rootfs/overlay/usr/local/bin/*).
+      - name: python compile check
+        run: |
+          targets="$( { find tools -name '*.py'; grep -rl '^#!/usr/bin/env python3' rootfs --include='*' 2>/dev/null; } | sort -u )"
+          echo "targets: $targets"
+          [ -n "$targets" ] || { echo "no python targets"; exit 0; }
+          for f in $targets; do
+            echo "::py_compile $f"
+            python3 -m py_compile "$f"
+          done
+          cleanup() { find . -name __pycache__ -type d -prune -exec rm -rf {} +; }
+          trap cleanup EXIT

@@ -179,31 +179,74 @@ LBA — so keeping Android means cutting the new `linux` partition out of the
 `tools/gpt-relabel.py` does for the rename; the carve mode is
 `tools/gpt-carve.py`).
 
-What is preserved: the Android ROM, Magisk and the Android boot slot are
-untouched; switching back and forth is `fastboot set_active a` / `set_active
-b`. What is lost: userdata's *contents* — the partition is block-encrypted
-and spans its full size, so after the carve the smaller partition must be
-reformatted: boot Android once and let it format (recommended), or format it
-from recovery with `make_f2fs`. Commit this step only if the (encrypted, thus
-unreadable) app data is expendable.
+**What survives:** the Android ROM, Magisk, its boot slot and (as tested) the
+userdata contents. **What to expect:** `userdata` is block-encrypted and filled
+to its old size, so Android may decide the resized partition is unusable and
+format it on the next boot. Treat app data as at-risk and back up what you
+care about before carving; on our test device the format never happened and
+everything was still there, but that is luck, not a guarantee.
 
 ```bash
 # tablet booted into a recovery with root (TWRP) or Android with root:
-bash carve-linux-partition.sh           # from a release bundle
-bash release/carve-linux-partition.sh   # from a git checkout
-bash release/carve-linux-partition.sh --dry-run
-bash release/carve-linux-partition.sh --gib 50        # default: 30 GiB
+bash carve-linux-partition.sh --dry-run   # show the plan, write nothing
+bash carve-linux-partition.sh             # from a release bundle (30 GiB default)
+bash release/carve-linux-partition.sh     # from a git checkout
+bash release/carve-linux-partition.sh --gib 50
 ```
 
-It detects the UFS LUN 0 block device, auto-detects the root mode (recovery
-adbd that is already root, no `su` binary — or `su` on a rooted ROM), pulls
-both GPT regions, patches them with `tools/gpt-carve.py` (overlap and sliver
-guards, identical partition GUIDs across both copies), writes them back and
-verifies by reading the table again.
+It detects the UFS LUN 0 block device, auto-detects the root mode (a recovery
+whose adbd is already root and has no `su` binary, or `su` on a rooted ROM),
+pulls both GPT regions, patches them with `tools/gpt-carve.py` (overlap and
+sliver guards, identical partition GUIDs across both copies), writes them back
+and verifies by reading the table again. Both pre-carve GPT regions are saved
+next to the tool as `*-pristine.bin`, so the carve can be undone by writing
+them back.
 
-Flash the rootfs to the carved partition with the standard
-[flash instructions](#flash-instructions); this project's `boot.img` then goes
-to the *other* slot (`fastboot set_active b` first) so Android keeps its own.
+Then flash CachyOS to its own slot: `fastboot set_active b`, run
+`flash.sh`/`join-and-flash.sh`, and the installer writes `boot_b` +
+`vbmeta_b` and the carved `linux` partition while Android keeps slot A.
+
+#### Switching between the two systems
+
+There is no boot menu — nabu only switches slots, and the bootloader picks the
+active one. Both directions are one command.
+
+**From CachyOS → Android** (no USB needed, the toolbox is already installed):
+
+```bash
+sudo qbootctl -s a     # make slot A active
+sudo reboot            # next boot is Android
+```
+
+**From Android → CachyOS:**
+
+```bash
+adb reboot bootloader
+fastboot set_active b
+fastboot reboot
+```
+
+The bootloader also counts failed boots: a slot that does not reach a booted
+state after a few attempts is marked unbootable and the other slot is used, so
+a broken install falls back to the working system instead of looping.
+
+#### What we tested (2026-10, nabu, crDroid 12 / Android 16 + Magisk on slot A)
+
+1. TWRP booted with `fastboot boot`, stock GPT pulled and inspected: 32
+   partitions, no free space, `userdata` last.
+2. `carve-linux-partition.sh` (dry run, then for real): `userdata` shortened to
+   ~76 GiB, new `linux` partition of exactly 30 GiB, both GPT copies re-read
+   and CRC-verified.
+3. CachyOS built, flashed to slot B (`set_active b`, `flash.sh`) and booted.
+4. `sudo qbootctl -s a` + reboot → the recovery shown by the bootloader picked
+   slot A, Android booted to the system it had before the carve, **with all
+   its data still present**.
+5. `adb reboot bootloader` → `fastboot set_active b` → `fastboot reboot` →
+   CachyOS back up, same rootfs, same user account.
+
+So the two systems coexist on one tablet, each on its own slot, sharing only
+the 30 GiB `linux` partition. Android's `/data` is now the smaller partition
+and stays Android's; CachyOS never mounts it.
 
 ### Step by step
 

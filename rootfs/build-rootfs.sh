@@ -45,6 +45,15 @@ if ! grep -q "ca.us.mirror.archlinuxarm.org" /etc/pacman.conf 2>/dev/null; then
     sed -i '/^\[options\]/a DisableDownloadTimeout\nParallelDownloads = 5' /etc/pacman.conf
 fi
 
+# The repo entries in pacman.conf are `Include = /etc/pacman.d/mirrorlist`,
+# so patching pacman.conf alone left every makepkg dependency download on the
+# slow plain-HTTP mirror (~25 KB/s, tens of minutes for vivaldi's deps).
+if [ -f /etc/pacman.d/mirrorlist ] && \
+   grep -q "http://mirror.archlinuxarm.org" /etc/pacman.d/mirrorlist; then
+    sed -i 's|http://mirror.archlinuxarm.org|https://ca.us.mirror.archlinuxarm.org|g' \
+        /etc/pacman.d/mirrorlist
+fi
+
 # 1. Bootstrap Arch ARM (cached: skip pacstrap if cache tarball exists)
 PACSTRAP_CACHE="/build/.cache/pacstrap-rootfs.tar"
 rm -rf "${ROOTFS}"

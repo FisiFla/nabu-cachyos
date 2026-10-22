@@ -1,0 +1,607 @@
+From: Flavio Fisicaro <flavio@fisicaro.xyz>
+Date: 2026-10-22
+Subject: [PATCH] media: qcom: iris: make the SM8150 VPU5 firmware decode
+
+The ported SM8150 support booted the vendor firmware but never decoded:
+the very first HFI session open timed out and the instance was torn down.
+Five independent bugs had to be fixed together.
+
+1. The codec never requested its LLCC system cache. The vendor firmware
+   refuses to start a session without the VIDSC0/VIDSC1 slices, so
+   session open timed out after HW_RESPONSE_TIMEOUT_VALUE and no error
+   was ever reported back. Request them at session open (and on the
+   syscache resource command, since the firmware asks again) and drop
+   them when the VPU powers off.
+
+2. iris_hfi_core_init() told the firmware to collapse the codec power
+   plane. The firmware then powered down its own GDSC and stopped
+   draining the command queue: everything after core init stayed unread.
+   Skip sys_interframe_powercollapse() for the legacy VPU5 firmware.
+
+3. Buffer sizes and counts were guessed from a per-buffer-type table and
+   never matched what this firmware expected (4 input buffers, 18 DPB,
+   32 output, ~25 MB scratch). Ask the firmware instead, with
+   HFI_CMD_SESSION_GET_PROPERTY / HFI_PROPERTY_CONFIG_BUFFER_REQUIREMENTS
+   at streamon, and use the reported size and hold_count.
+
+4. The DPB pool was deferred to streaming time, so LOAD_RESOURCES
+   arrived with an incomplete buffer set ("Load Resources Command
+   received without complete buffer set 6/16") and start then failed
+   with "Start Command received in Invalid State". Queue the whole
+   capture-side set before streamon for this firmware.
+
+5. FTB completions were matched on the host tag, but this firmware
+   echoes its own DPB slot number (tag = 0), so filled buffers were
+   never recognised. Match on the device address as a fallback, and use
+   the larger of the DPB/OUTPUT sizes for the DPB pool because the
+   firmware validates FTB allocations against the linear OUTPUT size.
+
+Signed-off-by: Flavio Fisicaro <flavio@fisicaro.xyz>
+---
+diff --git a/drivers/media/platform/qcom/iris/iris_buffer.c b/drivers/media/platform/qcom/iris/iris_buffer.c
+index eb8de60c1..688c3b856 100644
+--- a/drivers/media/platform/qcom/iris/iris_buffer.c
++++ b/drivers/media/platform/qcom/iris/iris_buffer.c
+@@ -488,8 +488,24 @@ static void iris_fill_internal_buf_info(struct iris_inst *inst,
+ {
+ 	struct iris_buffers *buffers = &inst->buffers[buffer_type];
+ 
+-	buffers->size = inst->core->iris_firmware_desc->get_vpu_buffer_size(inst, buffer_type);
+-	buffers->min_count = iris_vpu_buf_count(inst, buffer_type);
++	if (buffer_type == BUF_DPB && inst->fw_buf_size[BUF_OUTPUT])
++		/*
++		 * The legacy firmware validates FTB allocations against the
++		 * linear OUTPUT size, which is slightly larger than the UBWC
++		 * OUTPUT2 size it reports for the same DPB pool.
++		 */
++		buffers->size = max(inst->fw_buf_size[BUF_DPB],
++				    inst->fw_buf_size[BUF_OUTPUT]);
++	else if (inst->fw_buf_size[buffer_type])
++		buffers->size = inst->fw_buf_size[buffer_type];
++	else
++		buffers->size =
++			inst->core->iris_firmware_desc->get_vpu_buffer_size(inst, buffer_type);
++
++	if (inst->fw_buf_count[buffer_type])
++		buffers->min_count = inst->fw_buf_count[buffer_type];
++	else
++		buffers->min_count = iris_vpu_buf_count(inst, buffer_type);
+ }
+ 
+ static void iris_get_int_buf_tbl(struct iris_inst *inst, u32 plane,
+@@ -635,7 +651,14 @@ int iris_queue_internal_buffers(struct iris_inst *inst, u32 plane)
+ 				continue;
+ 			if (buffer->attr & BUF_ATTR_QUEUED)
+ 				continue;
+-			if (buffer->type == BUF_DPB && inst->state != IRIS_INST_STREAMING) {
++			/*
++			 * The legacy VPU5 firmware wants the whole buffer set at
++			 * LOAD_RESOURCES, so its DPB pool cannot be deferred to
++			 * streaming time like the newer firmwares expect.
++			 */
++			if (buffer->type == BUF_DPB &&
++			    inst->state != IRIS_INST_STREAMING &&
++			    !inst->core->iris_platform_data->legacy_vpu5) {
+ 				buffer->attr |= BUF_ATTR_DEFERRED;
+ 				continue;
+ 			}
+diff --git a/drivers/media/platform/qcom/iris/iris_core.h b/drivers/media/platform/qcom/iris/iris_core.h
+index 24da60448..1b9d6ac7a 100644
+--- a/drivers/media/platform/qcom/iris/iris_core.h
++++ b/drivers/media/platform/qcom/iris/iris_core.h
+@@ -16,6 +16,8 @@
+ #include "iris_resources.h"
+ #include "iris_state.h"
+ 
++struct llcc_slice_desc;
++
+ struct icc_info {
+ 	const char		*name;
+ 	u32			bw_min_kbps;
+@@ -120,6 +122,9 @@ struct iris_core {
+ 	u32					intr_status;
+ 	struct delayed_work			sys_error_handler;
+ 	struct list_head			instances;
++	struct llcc_slice_desc			*llcc_slices[2];
++	bool					llcc_active;
++	bool					syscache_set;
+ 	/* encoder and decoder have overlapping caps, so two different arrays are required */
+ 	struct platform_inst_fw_cap		inst_fw_caps_dec[INST_FW_CAP_MAX];
+ 	struct platform_inst_fw_cap		inst_fw_caps_enc[INST_FW_CAP_MAX];
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_common.c b/drivers/media/platform/qcom/iris/iris_hfi_common.c
+index 28f77ac97..f34bfebb0 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_common.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_common.c
+@@ -87,6 +87,16 @@ int iris_hfi_core_init(struct iris_core *core)
+ 	if (ret)
+ 		return ret;
+ 
++	/*
++	 * SM8150 hands the codec power plane over to the firmware with this
++	 * property. The firmware then collapses its own GDSC and stops draining
++	 * the command queue, so every later request - including
++	 * HFI_CMD_SYS_SESSION_INIT - is never read and session open times out.
++	 * Legacy VPU5 keeps the plane under host control instead.
++	 */
++	if (core->iris_platform_data->legacy_vpu5)
++		return 0;
++
+ 	return hfi_ops->sys_interframe_powercollapse(core);
+ }
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+index 473bb7b4a..3abaaff71 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+@@ -3,6 +3,8 @@
+  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
++#include <linux/soc/qcom/llcc-qcom.h>
++
+ #include "iris_hfi_gen1.h"
+ #include "iris_hfi_gen1_defines.h"
+ #include "iris_instance.h"
+@@ -79,6 +81,109 @@ static int iris_hfi_gen1_sys_power_control(struct iris_core *core, bool enable)
+ 	return ret;
+ }
+ 
++static int iris_hfi_gen1_sys_debug_config(struct iris_core *core)
++{
++	struct hfi_sys_set_property_pkt *pkt;
++	struct hfi_debug_config *config;
++	u32 packet_size;
++	int ret;
++
++	packet_size = struct_size(pkt, data, 1) + sizeof(*config);
++	pkt = kzalloc(packet_size, GFP_KERNEL);
++	if (!pkt)
++		return -ENOMEM;
++
++	config = (struct hfi_debug_config *)&pkt->data[1];
++	pkt->hdr.size = packet_size;
++	pkt->hdr.pkt_type = HFI_CMD_SYS_SET_PROPERTY;
++	pkt->num_properties = 1;
++	pkt->data[0] = HFI_PROPERTY_SYS_DEBUG_CONFIG;
++	config->debug_config = HFI_DEBUG_MSG_ERROR | HFI_DEBUG_MSG_FATAL;
++	config->debug_mode = HFI_DEBUG_MODE_QUEUE;
++
++	ret = iris_hfi_queue_cmd_write(core, pkt, pkt->hdr.size);
++	kfree(pkt);
++
++	return ret;
++}
++
++/*
++ * SM8150 firmware expects to be handed the video system cache (LLCC VIDSC0
++ * and VIDSC1) as an HFI resource before the first session is created. The
++ * upstream 7.x driver never sends this, and the firmware then stalls without
++ * ever answering HFI_CMD_SYS_SESSION_INIT.
++ */
++static int iris_hfi_gen1_syscache_config(struct iris_core *core)
++{
++	static const u32 usecase_ids[] = { LLCC_VIDSC0, LLCC_VIDSC1 };
++	struct hfi_sys_set_resource_pkt *pkt;
++	u32 packet_size, i;
++	int ret;
++
++	if (core->syscache_set)
++		return 0;
++
++	for (i = 0; i < ARRAY_SIZE(usecase_ids); i++) {
++		core->llcc_slices[i] = llcc_slice_getd(usecase_ids[i]);
++		if (IS_ERR(core->llcc_slices[i])) {
++			ret = PTR_ERR(core->llcc_slices[i]);
++			core->llcc_slices[i] = NULL;
++			dev_err(core->dev, "failed to get LLCC VIDSC%u slice: %d\n",
++				i, ret);
++			goto error_put;
++		}
++	}
++
++	for (i = 0; i < ARRAY_SIZE(usecase_ids); i++) {
++		ret = llcc_slice_activate(core->llcc_slices[i]);
++		if (ret) {
++			dev_err(core->dev, "failed to activate LLCC VIDSC%u: %d\n",
++				i, ret);
++			goto error_deactivate;
++		}
++	}
++	core->llcc_active = true;
++
++	/* data[] is num_entries followed by { size in KiB, slice id } pairs. */
++	packet_size = struct_size(pkt, data, 1 + (2 * ARRAY_SIZE(usecase_ids)));
++	pkt = kzalloc(packet_size, GFP_KERNEL);
++	if (!pkt) {
++		ret = -ENOMEM;
++		goto error_deactivate;
++	}
++
++	pkt->hdr.size = packet_size;
++	pkt->hdr.pkt_type = HFI_CMD_SYS_SET_RESOURCE;
++	pkt->resource_handle = 1;
++	pkt->resource_type = HFI_RESOURCE_SYSCACHE;
++	pkt->data[0] = ARRAY_SIZE(usecase_ids);
++	for (i = 0; i < ARRAY_SIZE(usecase_ids); i++) {
++		pkt->data[1 + (i * 2)] = llcc_get_slice_size(core->llcc_slices[i]);
++		pkt->data[2 + (i * 2)] = llcc_get_slice_id(core->llcc_slices[i]);
++	}
++
++	ret = iris_hfi_queue_cmd_write(core, pkt, pkt->hdr.size);
++	kfree(pkt);
++	if (ret)
++		goto error_deactivate;
++
++	core->syscache_set = true;
++
++	return 0;
++
++error_deactivate:
++	while (i--)
++		llcc_slice_deactivate(core->llcc_slices[i]);
++	core->llcc_active = false;
++error_put:
++	for (i = 0; i < ARRAY_SIZE(usecase_ids); i++) {
++		llcc_slice_putd(core->llcc_slices[i]);
++		core->llcc_slices[i] = NULL;
++	}
++
++	return ret;
++}
++
+ static int iris_hfi_gen1_sys_interframe_powercollapse(struct iris_core *core)
+ {
+ 	return iris_hfi_gen1_sys_power_control(core, true);
+@@ -94,6 +199,25 @@ static int iris_hfi_gen1_sys_pc_prep(struct iris_core *core)
+ 	return iris_hfi_queue_cmd_write_locked(core, &pkt, pkt.hdr.size);
+ }
+ 
++int iris_hfi_gen1_session_get_bufreq(struct iris_inst *inst)
++{
++	struct hfi_session_get_property_pkt packet = {
++		.shdr.hdr.size = sizeof(packet),
++		.shdr.hdr.pkt_type = HFI_CMD_SESSION_GET_PROPERTY,
++		.shdr.session_id = inst->session_id,
++		.num_properties = 1,
++		.data = HFI_PROPERTY_CONFIG_BUFFER_REQUIREMENTS,
++	};
++	int ret;
++
++	reinit_completion(&inst->completion);
++	ret = iris_hfi_queue_cmd_write(inst->core, &packet, packet.shdr.hdr.size);
++	if (ret)
++		return ret;
++
++	return iris_wait_for_session_response(inst, false);
++}
++
+ static int iris_hfi_gen1_session_open(struct iris_inst *inst)
+ {
+ 	struct hfi_session_open_pkt packet;
+@@ -104,6 +228,14 @@ static int iris_hfi_gen1_session_open(struct iris_inst *inst)
+ 		return -EALREADY;
+ 
+ 	if (inst->core->iris_platform_data->legacy_vpu5) {
++		ret = iris_hfi_gen1_sys_debug_config(inst->core);
++		if (ret)
++			return ret;
++
++		ret = iris_hfi_gen1_syscache_config(inst->core);
++		if (ret)
++			return ret;
++
+ 		ret = iris_hfi_gen1_sys_power_control(inst->core, false);
+ 		if (ret)
+ 			return ret;
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h b/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h
+index 275f3fea3..133bf02c4 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h
+@@ -21,6 +21,7 @@
+ 
+ #define HFI_CMD_SYS_INIT				0x10001
+ #define HFI_CMD_SYS_PC_PREP				0x10002
++#define HFI_CMD_SYS_SET_RESOURCE			0x10003
+ #define HFI_CMD_SYS_SET_PROPERTY			0x10005
+ #define HFI_CMD_SYS_GET_PROPERTY			0x10006
+ #define HFI_CMD_SYS_SESSION_INIT			0x10007
+@@ -35,6 +36,7 @@
+ #define HFI_CMD_SESSION_EMPTY_BUFFER			0x211004
+ #define HFI_CMD_SESSION_FILL_BUFFER			0x211005
+ #define HFI_CMD_SESSION_FLUSH				0x211008
++#define HFI_CMD_SESSION_GET_PROPERTY			0x211009
+ #define HFI_CMD_SESSION_RELEASE_BUFFERS			0x21100b
+ #define HFI_CMD_SESSION_RELEASE_RESOURCES		0x21100c
+ #define HFI_CMD_SESSION_CONTINUE			0x21100d
+@@ -80,9 +82,16 @@
+ #define HFI_BUFFER_INTERNAL_SCRATCH_1			0x7
+ #define HFI_BUFFER_INTERNAL_SCRATCH_2			0x8
+ 
++#define HFI_PROPERTY_SYS_DEBUG_CONFIG			0x1
+ #define HFI_PROPERTY_SYS_CODEC_POWER_PLANE_CTRL		0x5
+ #define HFI_PROPERTY_SYS_IMAGE_VERSION			0x6
+ 
++#define HFI_DEBUG_MSG_ERROR				0x00000008
++#define HFI_DEBUG_MSG_FATAL				0x00000010
++#define HFI_DEBUG_MODE_QUEUE				0x00000001
++
++#define HFI_RESOURCE_SYSCACHE				0x00000002
++
+ #define HFI_PROPERTY_PARAM_FRAME_SIZE			0x1001
+ #define HFI_PROPERTY_PARAM_UNCOMPRESSED_PLANE_ACTUAL_INFO	0x1002
+ #define HFI_PROPERTY_PARAM_UNCOMPRESSED_FORMAT_SELECT	0x1003
+@@ -114,6 +123,7 @@
+ #define HFI_MSG_SESSION_EMPTY_BUFFER			0x221007
+ #define HFI_MSG_SESSION_FILL_BUFFER			0x221008
+ #define HFI_MSG_SESSION_RELEASE_RESOURCES		0x22100a
++#define HFI_MSG_SESSION_PROPERTY_INFO			0x221009
+ #define HFI_MSG_SESSION_RELEASE_BUFFERS			0x22100c
+ 
+ #define HFI_GEN1_PICTURE_I					0x00000001
+@@ -194,18 +204,43 @@ struct hfi_sys_set_property_pkt {
+ 	u32 data[];
+ };
+ 
++struct hfi_sys_set_resource_pkt {
++	struct hfi_pkt_hdr hdr;
++	u32 resource_handle;
++	u32 resource_type;
++	u32 data[];
++};
++
+ struct hfi_sys_get_property_pkt {
+ 	struct hfi_pkt_hdr hdr;
+ 	u32 num_properties;
+ 	u32 data;
+ };
+ 
++struct hfi_debug_config {
++	u32 debug_config;
++	u32 debug_mode;
++};
++
+ struct hfi_session_set_property_pkt {
+ 	struct hfi_session_hdr_pkt shdr;
+ 	u32 num_properties;
+ 	u32 data[];
+ };
+ 
++struct hfi_session_get_property_pkt {
++	struct hfi_session_hdr_pkt shdr;
++	u32 num_properties;
++	u32 data;
++};
++
++struct hfi_msg_session_property_info_pkt {
++	struct hfi_session_hdr_pkt shdr;
++	u32 num_properties;
++	u32 property;
++	u32 data[];
++};
++
+ struct hfi_sys_pc_prep_pkt {
+ 	struct hfi_pkt_hdr hdr;
+ };
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c b/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
+index 0c4564a97..b73c20c27 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
+@@ -449,8 +449,15 @@ static void iris_hfi_gen1_session_ftb_done(struct iris_inst *inst, void *packet)
+ 			if (!(iter->attr & BUF_ATTR_QUEUED))
+ 				continue;
+ 
++			/*
++			 * The legacy VPU5 firmware echoes its own DPB slot
++			 * number instead of the host tag, so fall back to
++			 * matching the buffer address it returns.
++			 */
+ 			found = (iter->index == output_tag &&
+-				iter->data_offset == offset);
++				 iter->data_offset == offset) ||
++				(inst->core->iris_platform_data->legacy_vpu5 &&
++				 iter->device_addr == uncom_pkt->packet_buffer);
+ 
+ 			if (found) {
+ 				buf = iter;
+@@ -464,7 +471,9 @@ static void iris_hfi_gen1_session_ftb_done(struct iris_inst *inst, void *packet)
+ 				continue;
+ 
+ 			found = (buf->index == output_tag &&
+-				 buf->data_offset == offset);
++				 buf->data_offset == offset) ||
++				(inst->core->iris_platform_data->legacy_vpu5 &&
++				 buf->device_addr == uncom_pkt->packet_buffer);
+ 
+ 			if (found)
+ 				break;
+@@ -588,6 +597,10 @@ static const struct iris_hfi_gen1_response_pkt_info pkt_infos[] = {
+ 	 .pkt = HFI_MSG_SESSION_RELEASE_RESOURCES,
+ 	 .pkt_sz = sizeof(struct hfi_msg_session_hdr_pkt),
+ 	},
++	{
++	 .pkt = HFI_MSG_SESSION_PROPERTY_INFO,
++	 .pkt_sz = sizeof(struct hfi_msg_session_property_info_pkt),
++	},
+ 	{
+ 	 .pkt = HFI_MSG_SESSION_RELEASE_BUFFERS,
+ 	 .pkt_sz = sizeof(struct hfi_msg_session_release_buffers_done_pkt),
+@@ -620,6 +633,66 @@ static void iris_hfi_gen1_handle_response(struct iris_core *core, void *response
+ 	}
+ 
+ 	switch (hdr->pkt_type) {
++	case HFI_MSG_SESSION_PROPERTY_INFO: {
++		struct hfi_msg_session_property_info_pkt *pi = (void *)hdr;
++		struct hfi_buffer_requirements *req;
++		u32 bytes = pi->shdr.hdr.size - sizeof(*pi);
++		u32 count = bytes / sizeof(*req), i;
++
++		req = (struct hfi_buffer_requirements *)pi->data;
++		inst = iris_get_instance(core, pi->shdr.session_id);
++		if (!inst)
++			break;
++
++		mutex_lock(&inst->lock);
++		for (i = 0; i < count; i++) {
++			enum iris_buffer_type type;
++
++			switch (req[i].type) {
++			case HFI_BUFFER_INPUT:
++				type = BUF_INPUT;
++				break;
++			case HFI_BUFFER_OUTPUT:
++				type = BUF_OUTPUT;
++				break;
++			case HFI_BUFFER_OUTPUT2:
++				type = BUF_DPB;
++				break;
++			case HFI_BUFFER_INTERNAL_PERSIST_1:
++				type = BUF_PERSIST;
++				break;
++			case HFI_BUFFER_INTERNAL_SCRATCH:
++				type = BUF_BIN;
++				break;
++			case HFI_BUFFER_INTERNAL_SCRATCH_1:
++				type = BUF_SCRATCH_1;
++				break;
++			case HFI_BUFFER_INTERNAL_SCRATCH_2:
++				type = BUF_SCRATCH_2;
++				break;
++			case HFI_BUFFER_INTERNAL_PERSIST:
++				type = BUF_ARP;
++				break;
++			default:
++				continue;
++			}
++
++			inst->fw_buf_size[type] =
++				max(inst->fw_buf_size[type], req[i].size);
++			/*
++			 * HFI 4xx swaps the display hold count and the minimum
++			 * count fields; SM8150's VIDEO.IR.1.2 firmware uses the
++			 * legacy layout.
++			 */
++			inst->fw_buf_count[type] =
++				max(inst->fw_buf_count[type],
++				    core->iris_platform_data->legacy_vpu5 ?
++				    req[i].hold_count : req[i].count_min);
++		}
++		complete(&inst->completion);
++		mutex_unlock(&inst->lock);
++		break;
++	}
+ 	case HFI_MSG_SYS_INIT:
+ 		iris_hfi_gen1_sys_init_done(core, hdr);
+ 		break;
+diff --git a/drivers/media/platform/qcom/iris/iris_instance.h b/drivers/media/platform/qcom/iris/iris_instance.h
+index a770331d1..00cfa3ff5 100644
+--- a/drivers/media/platform/qcom/iris/iris_instance.h
++++ b/drivers/media/platform/qcom/iris/iris_instance.h
+@@ -100,6 +100,9 @@ struct iris_inst {
+ 	struct platform_inst_fw_cap	fw_caps[INST_FW_CAP_MAX];
+ 	struct iris_buffers		buffers[BUF_TYPE_MAX];
+ 	u32				fw_min_count;
++	/* buffer sizes and minimum counts reported by the firmware */
++	u32				fw_buf_size[BUF_TYPE_MAX];
++	u32				fw_buf_count[BUF_TYPE_MAX];
+ 	enum iris_inst_state		state;
+ 	enum iris_inst_sub_state	sub_state;
+ 	bool				once_per_session_set;
+diff --git a/drivers/media/platform/qcom/iris/iris_vdec.c b/drivers/media/platform/qcom/iris/iris_vdec.c
+index 9e228b704..cd820acbd 100644
+--- a/drivers/media/platform/qcom/iris/iris_vdec.c
++++ b/drivers/media/platform/qcom/iris/iris_vdec.c
+@@ -370,6 +370,22 @@ int iris_vdec_streamon_input(struct iris_inst *inst)
+ 	if (ret)
+ 		return ret;
+ 
++	/*
++	 * The legacy VPU5 firmware is the only source of truth for the buffer
++	 * sizes and minimum counts it expects, and it validates the complete
++	 * set at LOAD_RESOURCES. Ask it before anything is allocated.
++	 */
++	if (inst->core->iris_platform_data->legacy_vpu5) {
++		extern int iris_hfi_gen1_session_get_bufreq(struct iris_inst *inst);
++
++		ret = iris_hfi_gen1_session_get_bufreq(inst);
++		if (ret) {
++			dev_err(inst->core->dev,
++				"failed to query buffer requirements: %d\n", ret);
++			return ret;
++		}
++	}
++
+ 	iris_get_internal_buffers(inst, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+ 
+ 	ret = iris_destroy_dequeued_internal_buffers(inst, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+@@ -386,6 +402,21 @@ int iris_vdec_streamon_input(struct iris_inst *inst)
+ 
+ 	inst->frame_counter = 0;
+ 
++	/*
++	 * The capture side (DPB pool) is normally created when CAPTURE is
++	 * streamed on, but the legacy VPU5 firmware checks the complete buffer
++	 * set when it handles LOAD_RESOURCES, which the input streamon sends.
++	 */
++	if (inst->core->iris_platform_data->legacy_vpu5) {
++		iris_get_internal_buffers(inst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
++		ret = iris_create_internal_buffers(inst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
++		if (ret)
++			return ret;
++		ret = iris_queue_internal_buffers(inst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
++		if (ret)
++			return ret;
++	}
++
+ 	return iris_process_streamon_input(inst);
+ }
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu_buffer.c b/drivers/media/platform/qcom/iris/iris_vpu_buffer.c
+index faebb5472..85a7e2620 100644
+--- a/drivers/media/platform/qcom/iris/iris_vpu_buffer.c
++++ b/drivers/media/platform/qcom/iris/iris_vpu_buffer.c
+@@ -2216,6 +2216,14 @@ static inline int iris_vpu_dpb_count(struct iris_inst *inst)
+ 		return 11;
+ 
+ 	if (iris_split_mode_enabled(inst)) {
++		/*
++		 * The legacy VPU5 firmware validates the complete buffer set at
++		 * LOAD_RESOURCES, before it reports its own DPB minimum, so the
++		 * host has to hand it the full reference pool up front.
++		 */
++		if (!inst->fw_min_count &&
++		    inst->core->iris_platform_data->legacy_vpu5)
++			return 16;
+ 		return inst->fw_min_count ?
+ 			inst->fw_min_count : inst->buffers[BUF_OUTPUT].min_count;
+ 	}
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu_common.c b/drivers/media/platform/qcom/iris/iris_vpu_common.c
+index 64d470c51..5653bd37b 100644
+--- a/drivers/media/platform/qcom/iris/iris_vpu_common.c
++++ b/drivers/media/platform/qcom/iris/iris_vpu_common.c
+@@ -8,6 +8,7 @@
+ #include <linux/pm_opp.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/reset.h>
++#include <linux/soc/qcom/llcc-qcom.h>
+ 
+ #include "iris_core.h"
+ #include "iris_instance.h"
+@@ -308,6 +309,18 @@ void iris_vpu_power_off_hw(struct iris_core *core)
+ 
+ void iris_vpu_power_off(struct iris_core *core)
+ {
++	int i;
++
++	if (core->llcc_active) {
++		for (i = ARRAY_SIZE(core->llcc_slices) - 1; i >= 0; i--) {
++			llcc_slice_deactivate(core->llcc_slices[i]);
++			llcc_slice_putd(core->llcc_slices[i]);
++			core->llcc_slices[i] = NULL;
++		}
++		core->llcc_active = false;
++		core->syscache_set = false;
++	}
++
+ 	core->iris_platform_data->vpu_ops->power_off_hw(core);
+ 	iris_opp_set_rate(core->dev, 0);
+ 	core->iris_platform_data->vpu_ops->power_off_controller(core);

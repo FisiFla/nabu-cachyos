@@ -10,9 +10,9 @@ running on the mainline-derived nabu kernel with CachyOS tuning.
 - **Arch Linux ARM** rootfs, bootstrapped with `pacstrap` inside Docker
 - **Kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (`nabu/7.3.y`) plus the CachyOS config fragment (1000 Hz, full preemption, Btrfs, zram/zstd, THP)
 - **GNOME Shell 51 on Wayland** with a working on-screen keyboard, CachyOS theming and dconf tuning
-- **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity + accelerometer, USB serial console, **suspend/resume**, **battery reporting**
+- **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity + accelerometer, USB serial console, **suspend/resume**, **battery reporting**, **hardware video decode (Iris VPU)**
 - **Supported by the kernel, not yet verified end to end:** quad speakers (CS35L41), charger, magnetic keyboard/cover, stylus buttons
-- **Known broken:** hardware video decode (Iris) — see [Known limitations](#known-limitations)
+- **Known broken:** none that we know of — see [Known limitations](#known-limitations) for the rough edges
 - **Tablet UX:** GDM auto-login, no lock screen, tablet-sized UI, power button ignored on short press (long press still powers off)
 - `paru` + the CachyOS tool set (`cachyos-settings`, wallpapers, Plymouth animation, zsh/fish configs, Alacritty)
 - **Direct boot** — Android bootimg format, no GRUB, no UEFI
@@ -196,13 +196,8 @@ accounts, so `passwd -l root` would break root over SSH.
 ## Known limitations
 
 - **Camera** — no mainline driver on nabu.
-- **Hardware video decode (Iris)** — the `qcom_iris` driver binds and the VPU
-  firmware boots, but every session open ends in `HFI session open failed`
-  (no response to `HFI_CMD_SYS_SESSION_INIT` within 1 s), so `h264_v4l2m2m`
-  cannot decode. Playing video works via the CPU (mpv/ffmpeg software decode).
-  The node is additionally gated behind `qcom_iris.allow_fw_boot=1`
-  (`/etc/modprobe.d/qcom-iris.conf`), which is *not* shipped since decode does
-  not work yet. Tracked in issue #41.
+- **Video decode** is hardware-accelerated but opt-in per player — see
+  [Hardware notes](#hardware-notes). 10-bit and DRM-Prime paths are untested.
 - **Suspend** — `s2idle` works and sensors survive it: `hexagonrpcd-{suspend,resume}.service`
   stop and restart the live bridge (sdsp on 7.3, the adsp pair on older kernels) and a
   sleep hook re-probes `iio-sensor-proxy`, so accelerometer, light, proximity and
@@ -238,6 +233,11 @@ and gesture navigation for free.
   cover exposes phantom pointer devices (which made mutter treat the tablet as a
   desktop and drop the accelerometer), and the SSC frame is 180° rotated relative
   to the panel (`ACCEL_MOUNT_MATRIX` on the fastrpc nodes).
+- **Hardware video decode** goes through the Iris VPU (`/dev/video0` decoder,
+  `/dev/video1` encoder). It is a V4L2 mem2mem device, so the player has to ask
+  for it: `ffmpeg -c:v h264_v4l2m2m -i in.mp4 …` (also `hevc_v4l2m2m`,
+  `vp9_v4l2m2m`); with mpv, `--hwdec=v4l2m2m-copy`. Software decoding still
+  works and is what you get by default.
 - **Proximity** uses the Xiaomi SAR sensor through a fallback patch, since the SSC
   registry exposes no standard proximity datatype.
 - **USB serial console** is opt-in: `sudo nabu-serial-gadget enable` exposes an

@@ -702,6 +702,19 @@ arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-resume.service 2>/dev/null 
 chmod 755 "${ROOTFS}/usr/local/bin/nabu-growroot"
 arch-chroot "${ROOTFS}" systemctl enable nabu-growroot.service 2>/dev/null || true
 
+# The nabu kernel's iris driver refuses to open /dev/video* unless the
+# allow_fw_boot module parameter is set (iris_vidc.c gates iris_open() on it).
+# Only write the option when the built module really exports the parameter:
+# an unknown parameter makes modprobe refuse the whole module.
+IRIS_KO="${KERNEL_DIR}/modules/lib/modules/${KERNEL_RELEASE}/kernel/drivers/media/platform/qcom/iris/qcom-iris.ko"
+if [ -f "${IRIS_KO}" ] && grep -qa "allow_fw_boot" "${IRIS_KO}"; then
+    install -Dm644 /dev/stdin "${ROOTFS}/etc/modprobe.d/qcom-iris.conf" << 'IRISEOF'
+# Open the Iris VPU nodes to userspace; without this iris_open() returns EACCES
+# and no player can reach the hardware decoder.
+options qcom_iris allow_fw_boot=1
+IRISEOF
+fi
+
 # Create systemd services for Qualcomm daemons
 # NOTE: qrtr-ns is NOT needed — kernel 6.14 has in-kernel QRTR name service.
 # Userspace qrtr-ns fails with "bind control socket: Address already in use".

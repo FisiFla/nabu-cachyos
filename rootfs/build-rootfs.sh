@@ -36,6 +36,15 @@ if [ -z "${KERNEL_RELEASE}" ]; then
 fi
 echo "--- Building rootfs (kernel release: ${KERNEL_RELEASE}) ---"
 
+# The builder container's own pacman (used by build-qualcomm.sh and
+# build-iio-sensor-proxy.sh) still points at mirror.archlinuxarm.org, which
+# stalls mid-transfer and aborts transactions. Point it at the HTTPS mirror
+# the tarball step already uses, and let slow downloads finish.
+if ! grep -q "ca.us.mirror.archlinuxarm.org" /etc/pacman.conf 2>/dev/null; then
+    sed -i 's|http://mirror.archlinuxarm.org|https://ca.us.mirror.archlinuxarm.org|g' /etc/pacman.conf
+    sed -i '/^\[options\]/a DisableDownloadTimeout\nParallelDownloads = 5' /etc/pacman.conf
+fi
+
 # 1. Bootstrap Arch ARM (cached: skip pacstrap if cache tarball exists)
 PACSTRAP_CACHE="/build/.cache/pacstrap-rootfs.tar"
 rm -rf "${ROOTFS}"

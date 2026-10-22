@@ -96,11 +96,13 @@ rollback_patch_files() {
         | sort -u \
         | while IFS= read -r f; do
             [ -n "${f}" ] || continue
-            if git ls-tree -r HEAD --name-only | grep -Fxq -- "${f}"; then
+            if git cat-file -e "HEAD:${f}" 2>/dev/null; then
                 git checkout -f HEAD -- "${f}"
             else
                 rm -f -- "${f}"
             fi
+            # git apply --reject/3way leftovers are not listed by --numstat.
+            rm -f -- "${f}.rej" "${f}.orig"
         done
 }
 PATCH_SENTINEL_USED=0

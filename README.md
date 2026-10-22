@@ -10,8 +10,8 @@ running on the mainline-derived nabu kernel with CachyOS tuning.
 - **Arch Linux ARM** rootfs, bootstrapped with `pacstrap` inside Docker
 - **Kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (`nabu/7.3.y`) plus the CachyOS config fragment (1000 Hz, full preemption, Btrfs, zram/zstd, THP)
 - **GNOME Shell 51 on Wayland** with a working on-screen keyboard, CachyOS theming and dconf tuning
-- **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity, USB serial console
-- **Supported by the kernel, not yet verified end to end:** quad speakers (CS35L41), charger, Iris video decode, magnetic keyboard/cover, suspend/resume
+- **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity + accelerometer, USB serial console, **suspend/resume**
+- **Supported by the kernel, not yet verified end to end:** quad speakers (CS35L41), charger, Iris video decode, magnetic keyboard/cover
 - **Tablet UX:** GDM auto-login, no lock screen, tablet-sized UI, power button ignored on short press (long press still powers off)
 - `paru` + the CachyOS tool set (`cachyos-settings`, wallpapers, Plymouth animation, zsh/fish configs, Alacritty)
 - **Direct boot** — Android bootimg format, no GRUB, no UEFI
@@ -193,10 +193,13 @@ accounts, so `passwd -l root` would break root over SSH.
 ## Known limitations
 
 - **Camera** — no mainline driver on nabu.
-- **Suspend** — s2idle exists and suspend/resume plumbing (hexagonrpcd stop/start,
-  sensor restart hook) is shipped, but the power-key suspend path is not wired to
-  the button; short press is ignored, long press powers off. Suspend behaviour on
-  the 7.3 kernel is not yet verified end to end.
+- **Suspend** — `s2idle` works and sensors survive it: `hexagonrpcd-{suspend,resume}.service`
+  stop and restart the live bridge (sdsp on 7.3, the adsp pair on older kernels) and a
+  sleep hook re-probes `iio-sensor-proxy`, so accelerometer, light, proximity and
+  auto-rotation come back after wake without a reboot. The SLPI `sensor_process` PD
+  usually crashes once on resume and recovers by itself. The power button is not wired
+  to suspend: short press is ignored, long press powers off, so suspend it from the
+  session menu or `systemctl suspend`.
 - **Warm-reboot black screen** — after `fastboot reboot` the panel occasionally
   stays dark with no USB; a cold power cycle (hold Power ~15 s) recovers.
 - **`cachyos-packageinstaller`** — its AUR PKGBUILD fails on aarch64; the build

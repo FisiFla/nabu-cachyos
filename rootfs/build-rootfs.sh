@@ -163,7 +163,7 @@ cp -f "${FIRMWARE_DIR}"/*cs35l41* "${ROOTFS}/usr/lib/firmware/cirrus/" 2>/dev/nu
 # fstab's nofail can find it. Without /persist/sensors/registry/sns.reg the
 # ADSP SSC firmware has no calibration data for the LSM6DSO and iio-sensor-proxy
 # stays silent — auto-rotate fails closed without affecting anything else.
-mkdir -p "${ROOTFS}/persist"
+mkdir -p "${ROOTFS}/mnt/vendor/persist"
 
 # 4. Copy overlay configs
 echo "Applying overlay configs..."
@@ -426,7 +426,7 @@ arch-chroot "${ROOTFS}" systemctl enable qbootctl-mark-success.service 2>/dev/nu
 arch-chroot "${ROOTFS}" systemctl enable ananicy-cpp.service 2>/dev/null || true
 # Auto-rotation full sensor stack (NAS-218).
 # Chain (boot order):
-#   1. local-fs.target mounts /persist (factory sns.reg calibrations)
+#   1. local-fs.target mounts /mnt/vendor/persist (factory sns.reg calibrations)
 #   2. remoteproc autoloads SLPI from /usr/lib/firmware/.../slpi_nb.mbn
 #      (DT enable-slpi.sh flipped the node to status="okay")
 #   3. /dev/fastrpc-adsp appears
@@ -434,7 +434,7 @@ arch-chroot "${ROOTFS}" systemctl enable ananicy-cpp.service 2>/dev/null || true
 #   5. hexagonrpcd-adsp-sensorspd.service starts (sensors PD; serves the
 #      hexagonfs/ tree to SLPI over FastRPC reverse tunnel)
 #   6. SLPI firmware reads sensor configs (lsm6dso/akm/bu27030/etc) +
-#      sns.reg from /persist, registers Sensor Manager via QRTR
+#      sns.reg from /mnt/vendor/persist, registers Sensor Manager via QRTR
 #   7. iio-sensor-proxy starts (after sensorspd), subscribes via libssc,
 #      exposes net.hadess.SensorProxy on D-Bus
 #   8. GNOME auto-rotates
@@ -506,14 +506,16 @@ restart_dropin "hexagonrpcd-adsp-rootpd"
 restart_dropin "hexagonrpcd-adsp-sensorspd"
 
 mkdir -p "${ROOTFS}/etc/systemd/system/hexagonrpcd-sdsp.service.d"
-# NAS-247: use -S sensorspd (INIT_CREATE_STATIC, our patched -S option) NOT
-# -s (INIT_ATTACH_SNS). On nabu's SLPI the sensorspd PD doesn't pre-exist;
-# we need to CREATE it, not attach to an existing one. The patch lives at
-# tools/hexagonrpc-add-create-static.patch and is applied by build-qualcomm.sh.
+# On 7.3 the kernel exposes /dev/fastrpc-sdsp, so upstream's
+# hexagonrpcd-adsp-*.service units skip themselves (ConditionPathExists=
+# "!/dev/fastrpc-sdsp") and THIS unit is the one that serves the sensors.
+# Use -s (INIT_ATTACH_SNS, i.e. attach to the running SDSP sensor PD). The
+# static-PD alternative (-S sensorspd, our patched option) exits with status
+# 4 on this kernel: the PD is already up and cannot be created twice.
 cat > "${ROOTFS}/etc/systemd/system/hexagonrpcd-sdsp.service.d/nabu-path.conf" << CONFEOF
 [Service]
 ExecStart=
-ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -S sensorspd -R ${NABU_HEXAGONFS}
+ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -s -R ${NABU_HEXAGONFS}
 CONFEOF
 
 # Build libssc + a patched iio-sensor-proxy (see build-iio-sensor-proxy.sh).
@@ -534,8 +536,10 @@ bash "${SCRIPT_DIR}/build-iio-sensor-proxy.sh" "${ROOTFS}"
 mkdir -p "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d"
 cat > "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d/wait-for-slpi.conf" << 'IIOEOF'
 [Unit]
-After=hexagonrpcd-adsp-sensorspd.service
-Wants=hexagonrpcd-adsp-sensorspd.service
+# Either model may be the active one: adsp-sensorspd on older kernels, sdsp
+# on 7.3 (where /dev/fastrpc-sdsp exists and the adsp pair skips itself).
+After=hexagonrpcd-adsp-sensorspd.service hexagonrpcd-sdsp.service
+Wants=hexagonrpcd-adsp-sensorspd.service hexagonrpcd-sdsp.service
 
 [Service]
 ExecStartPre=/usr/local/bin/wait-for-slpi-sensors
@@ -774,17 +778,21 @@ else
     echo "  Initramfs: ${INITRAMFS}"
 fi
 
-# 12. fstab (ext4 root, FAT32 ESP, factory /persist for sensor calibration)
+# 12. fstab (ext4 root, FAT32 ESP, factory persist for sensor calibration)
 cat > "${ROOTFS}/etc/fstab" << 'FSTAB'
 # CachyOS Nabu fstab
 PARTLABEL=linux    /           ext4   rw,noatime,discard           0 1
 # ESP commented out: FAT32 sector size incompatible with UFS, causes emergency mode
 # PARTLABEL=esp    /boot/efi   vfat   defaults                     0 2
-# Factory persist: ext4 on most nabu firmware revisions, but some ship f2fs.
-# nofail keeps boot alive on a mismatch — auto-rotation just stops working.
-# Re-flash with `fastboot getvar partition-type:persist` to confirm FS-type if
-# /persist/sensors/registry/sns.reg never appears after a clean boot.
-PARTLABEL=persist  /persist    ext4   ro,nosuid,nodev,nofail       0 0
+# Factory persist. MUST be mounted at /mnt/vendor/persist: the SLPI's
+# sensor_process PD opens /mnt/vendor/persist/sensors/registry/temp.json
+# through hexagonrpcd. With any other mountpoint its USER-PD watchdog fires
+# ("detects stalled initialization") and the sensor island crash-loops every
+# ~40s, so the accelerometer never registers. With this path the loop stops
+# and the registry (lsm6dso_0 accel/gyro, ambient light, SAR) restores.
+# ext4 on most nabu firmware revisions, but some ship f2fs; nofail keeps boot
+# alive on a mismatch — sensors just stay unavailable.
+PARTLABEL=persist  /mnt/vendor/persist    ext4   ro,noatime,nofail       0 0
 FSTAB
 
 # 13. Leave rootfs in container-local path for build-image.sh to consume

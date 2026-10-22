@@ -5,7 +5,8 @@ Subject: [PATCH] Add Xiaomi SAR proximity fallback for nabu
 
 nabu publishes proximity via the Xiaomi 'sar_algo_1' sensor datatype
 ('sar_detector_1') instead of the SSC standard 'proximity' datatype, and
-the stock udev rules never tag the FastRPC device with 'ssc-proximity',
+the stock udev rules never tag the FastRPC device with 'ssc-proximity' or
+'ssc-accel',
 so HasProximity is always false.  Tag fastrpc-* with 'ssc-proximity' and
 fall back to the sar_algo_1 sensor in the SSC proximity driver: decode
 its first float as a near/far state (1.0 = near).
@@ -24,8 +25,8 @@ index fa8a4b3..d07a66d 100644
  # These DSPs expose itself as /dev/fastrpc-* in the misc subsystem.
 -SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass"
 -SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass"
-+SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass ssc-proximity"
-+SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass ssc-proximity"
++SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass ssc-proximity ssc-accel"
++SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass ssc-proximity ssc-accel"
  
  ENV{IIO_SENSOR_PROXY_TYPE}=="", GOTO="iio_sensor_proxy_end"
  

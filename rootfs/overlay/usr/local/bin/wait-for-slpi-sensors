@@ -1,30 +1,35 @@
 #!/usr/bin/bash
 # Wait until the SLPI sensor stack is up before iio-sensor-proxy starts.
 #
-# Wants=/After= on hexagonrpcd-adsp-sensorspd only order the start — they do
-# not guarantee the daemon ever succeeded. If sensorspd fails early,
-# iio-sensor-proxy still races in, finds no Sensor Manager service on QRTR,
-# and the sensor stack stays dead until the next reboot. This ExecStartPre
-# helper polls for the FastRPC device and the active sensorspd daemon.
+# Wants=/After= on the hexagonrpcd units only order the start — they do not
+# guarantee the daemon ever succeeded. If it fails early, iio-sensor-proxy
+# still races in, finds no Sensor Manager service on QRTR, and the sensor
+# stack stays dead until the next reboot. This ExecStartPre helper polls for
+# the FastRPC device and the active daemon.
+#
+# Two models exist and either one counts as ready:
+#   - 6.17/adsp: /dev/fastrpc-adsp + hexagonrpcd-adsp-sensorspd.service
+#   - 7.3/sdsp:  /dev/fastrpc-sdsp + hexagonrpcd-sdsp.service
+#     (on that kernel the adsp pair skips itself via ConditionPathExists)
 #
 # Best-effort: when the timeout expires the caller still starts, so a broken
 # stack degrades the same way it always did instead of blocking boot.
 set -u
 
 TIMEOUT="${SLPI_WAIT_TIMEOUT:-60}"
-DEVICE=/dev/fastrpc-adsp
-UNIT=hexagonrpcd-adsp-sensorspd.service
+DEVICES="/dev/fastrpc-adsp /dev/fastrpc-sdsp"
+UNITS="hexagonrpcd-adsp-sensorspd.service hexagonrpcd-sdsp.service"
 
 elapsed=0
 while [ "${elapsed}" -lt "${TIMEOUT}" ]; do
     device_ok=0
     unit_ok=0
-    if [ -e "${DEVICE}" ]; then
-        device_ok=1
-    fi
-    if systemctl is-active --quiet "${UNIT}" 2>/dev/null; then
-        unit_ok=1
-    fi
+    for dev in ${DEVICES}; do
+        [ -e "${dev}" ] && device_ok=1
+    done
+    for unit in ${UNITS}; do
+        systemctl is-active --quiet "${unit}" 2>/dev/null && unit_ok=1
+    done
     if [ "${device_ok}" -eq 1 ] && [ "${unit_ok}" -eq 1 ]; then
         echo "SLPI sensor stack ready after ${elapsed}s."
         exit 0

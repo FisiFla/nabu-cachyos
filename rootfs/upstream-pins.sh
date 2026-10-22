@@ -39,18 +39,22 @@ VIVALDI_MULTIARCH_BIN_COMMIT="22e1863fa6af955674db3ef958f93104db2862e9"
 # AUR: paru-bin
 PARU_BIN_COMMIT="92a55429afbec4fceeb2cef843245105307444d2"
 
-# iio-sensor-proxy + libssc (rootfs/build-iio-sensor-proxy.sh — issue #24).
-# Pinned at the commits the nabu patches were written against:
+# iio-sensor-proxy + libssc (rootfs/build-iio-sensor-proxy.sh — issue #24,
+# updated by issue #30).
 #   iio-sensor-proxy tag 3.9 (annotated) → 0085ddf8ecb1…; patched by
 #   rootfs/patches/iio-sensor-proxy/{0001-fix-ssc-race-condition,
 #   0002-ssc-proximity-nabu-sar-fallback}.patch (source:
 #   github.com/Kumar-Jy/nabu-pkgs (HEAD fec1080 2026-10-21)/packages/iio-sensor-proxy @ master,
-#   fetched 2026-10-22).
-#   libssc tag v0.4.4 (annotated) → 0cf77b93b557…; patched by
-#   rootfs/patches/libssc/0001-report-handler-lifecycle-fixes.patch
-#   (source: nabu-pkgs/packages/libssc @ master).
+#   fetched 2026-10-22). Both patches verified to apply cleanly to the 3.9 tag.
+#   libssc → post-v0.4.4 master 4e4c6c8c (2026-09-11). NO vendored patch:
+#   nabu-pkgs' report-handler-lifecycle patch was written against this master
+#   state (not v0.4.4), so it half-applied with `patch -Np1` fuzz on the tag
+#   and left the build broken under strict GLib macro checking (see issue
+#   #30). Everything the patch did is already upstream here — the "guint"
+#   report-handler fields that matter are `gulong` and
+#   g_clear_signal_handler() is only used where the field is gulong.
 IIO_SENSOR_PROXY_COMMIT="0085ddf8ecb173a1c5fcf2344aa40e561125354f"
-LIBSSC_COMMIT="0cf77b93b55752da34dca2dcecc06fca8665184b"
+LIBSSC_COMMIT="4e4c6c8cc702a754bd700506c01961aaf971a23b"
 
 # clone_pinned <url> <dir> <commit>
 # Fetch exactly one depth-1 commit and check it out. Works for any commit

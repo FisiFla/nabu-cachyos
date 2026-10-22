@@ -6,7 +6,9 @@ set -euo pipefail
 # proximity).
 #
 # What we build:
-#   libssc           tag v0.4.4 + report-handler lifecycle fix patch
+#   libssc           post-v0.4.4 master (4e4c6c8c) — upstream already includes
+#                    the report-handler lifecycle fixes; no patch needed
+#                    (see upstream-pins.sh + issue #30)
 #   iio-sensor-proxy tag 3.9   + SSC race-condition patch + Xiaomi sar
 #                                proximity ("ssc-proximity") patches
 #
@@ -41,11 +43,13 @@ cd "${BUILD_DIR}"
 pacman -S --needed --noconfirm gobject-introspection libqmi protobuf-c polkit >/dev/null
 
 # 1. libssc — the library SSC-support builds against, and the runtime lib the
-#    daemon loads (libqmi/glib are runtime deps).
-echo "  [1/2] Building libssc v0.4.4..."
+#    daemon loads (libqmi/glib are runtime deps). Pinned to the master commit
+#    that already carries the report-handler lifecycle fixes — do NOT apply
+#    nabu-pkgs' patch here: it was written against this state, and fuzzily
+#    half-applying it onto the v0.4.4 tag breaks the build.
+echo "  [1/2] Building libssc (${LIBSSC_COMMIT:0:12})..."
 clone_pinned "https://codeberg.org/DylanVanAssche/libssc.git" \
     libssc "${LIBSSC_COMMIT}"
-patch -Np1 -d libssc < "${PINS_DIR}/patches/libssc/0001-report-handler-lifecycle-fixes.patch"
 meson setup libssc/builddir libssc --prefix=/usr --libdir=/usr/lib --buildtype=release
 meson compile -C libssc/builddir
 meson install -C libssc/builddir             # into the builder container
@@ -55,8 +59,12 @@ DESTDIR="${ROOTFS}" meson install -C libssc/builddir     # into the target rootf
 echo "  [2/2] Building iio-sensor-proxy 3.9 + SSC/sar patches..."
 clone_pinned "https://gitlab.freedesktop.org/hadess/iio-sensor-proxy.git" \
     iio-sensor-proxy "${IIO_SENSOR_PROXY_COMMIT}"
-patch -Np1 -d iio-sensor-proxy < "${PINS_DIR}/patches/iio-sensor-proxy/0001-fix-ssc-race-condition.patch"
-patch -Np1 -d iio-sensor-proxy < "${PINS_DIR}/patches/iio-sensor-proxy/0002-ssc-proximity-nabu-sar-fallback.patch"
+# Patches via strict `git apply` (all-or-nothing): `patch`'s fuzzy fallback can
+# half-apply a mismatched patch and preserve the illusion of success (issue #30).
+git -C iio-sensor-proxy apply -v \
+    "${PINS_DIR}/patches/iio-sensor-proxy/0001-fix-ssc-race-condition.patch"
+git -C iio-sensor-proxy apply -v \
+    "${PINS_DIR}/patches/iio-sensor-proxy/0002-ssc-proximity-nabu-sar-fallback.patch"
 meson setup iio-sensor-proxy/builddir iio-sensor-proxy \
     --prefix=/usr --libdir=/usr/lib --buildtype=release \
     -Dsystemdsystemunitdir=/usr/lib/systemd/system \

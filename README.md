@@ -425,7 +425,7 @@ nabu-cachyos/
 │   ├── build-theming.sh        # Builds CachyOS theming packages from PKGBUILDS
 │   ├── build-qualcomm.sh       # Builds qrtr/qmic/rmtfs/tqftpserv/qbootctl/hexagonrpc
 │   ├── build-iio-sensor-proxy.sh # Builds libssc + patched iio-sensor-proxy (SSC/sar)
-│   ├── patches/                # Vendored patches (SSC race, sar proximity, libssc)
+│   ├── patches/                # Vendored patches (SSC race condition, sar proximity)
 │   ├── upstream-pins.sh        # Pinned upstream commits for every cloned repo
 │   ├── packages.txt            # Official repo packages to install
 │   ├── packages-aur.txt        # AUR packages (Vivaldi)

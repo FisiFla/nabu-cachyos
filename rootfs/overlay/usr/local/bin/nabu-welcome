@@ -82,9 +82,11 @@ class WelcomeApp(Gtk.Application):
                 "The default user is 'nabu' and ships with NO password — "
                 "intentional, because a lock screen with a blank password "
                 "is unrecoverable on this build. If you want a password "
-                "(needed before enabling a lock screen or exposing SSH "
-                "with PasswordAuthentication), set one via the button "
-                "below. Otherwise, use the other buttons to get started."
+                "(needed before enabling a lock screen), set one via the "
+                "button below. SSH is key-only by default; if you set a "
+                "password and want to log in over SSH with it, run "
+                "'sudo nabu-ssh-password on'. Otherwise, use the other "
+                "buttons to get started."
             )
         )
         body.set_wrap(True)

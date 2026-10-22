@@ -271,7 +271,14 @@ arch-chroot "${ROOTFS}" ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 # requires keys.
 arch-chroot "${ROOTFS}" useradd -m -G wheel,video,audio,input -s /usr/bin/zsh nabu
 arch-chroot "${ROOTFS}" passwd -d nabu
-arch-chroot "${ROOTFS}" passwd -d root
+# root gets an invalid hash ("*") instead of an empty one: no password can
+# ever authenticate against it and `passwd -S` reports the account as locked.
+# Deliberately NOT `passwd -l root` — that writes a "!"-prefixed hash, and
+# the sshd_config shipped by Arch Linux ARM leaves UsePAM at its default of
+# "no". Without PAM, OpenSSH's platform_locked_account() rejects *key*
+# logins for locked accounts, so `passwd -l` would silently break root-over-
+# SSH. "*" gives the same guarantee without that side effect.
+arch-chroot "${ROOTFS}" usermod -p '*' root
 # NOTE: Do NOT use chage -d 0 (password expiry breaks GDM auto-login)
 
 # Passwordless sudo for nabu (matches the "no password by default" stance).
@@ -599,9 +606,16 @@ ln -sf qcom/a630_sqe.fw "${ROOTFS}/usr/lib/firmware/a630_sqe.fw"
 # 10e. SSH config (key-based root login only, password login for nabu user)
 echo "Configuring SSH..."
 mkdir -p "${ROOTFS}/etc/ssh/sshd_config.d"
+# One drop-in, one policy. sshd reads /etc/ssh/sshd_config.d/*.conf in
+# lexicographic order and keeps the FIRST value of each keyword, so this
+# file (and only this file) decides how SSH authenticates. `nabu-ssh-password
+# on` drops in "10-nabu-password.conf", which sorts earlier and therefore
+# wins for PasswordAuthentication — that is the supported opt-in.
 cat > "${ROOTFS}/etc/ssh/sshd_config.d/nabu.conf" << 'SSHEOF'
 PermitRootLogin prohibit-password
-PasswordAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
 SSHEOF
 
 # --- End live-debugging fixes ---

@@ -226,11 +226,31 @@ If the tablet does not boot:
 | Account | Password | Notes |
 |---|---|---|
 | `nabu` | _(none)_ | Auto-login via GDM. Passwordless `sudo` (`NOPASSWD: ALL` in `/etc/sudoers.d/zz-nabu-nopasswd`). Member of `wheel/video/audio/input`. |
-| `root` | _(none)_ | Account is locked from password login. SSH root only via key (`PermitRootLogin yes`, no password auth). |
+| `root` | _(none)_ | Password hash is `*`: no password can ever authenticate against it, and the account is reported as locked. SSH root login is key-only (`PermitRootLogin prohibit-password`). |
 
 **Want a password?** Run `passwd` (no current password needed). To make `sudo` prompt for it, also delete `/etc/sudoers.d/zz-nabu-nopasswd`.
 
 PAM rejects empty-password login (no `nullok` set), so this combination is safe in practice: GDM auto-logs in without prompting, `sudo` doesn't ask, SSH requires keys.
+
+### SSH authentication
+
+SSH is key-only out of the box. `/etc/ssh/sshd_config.d/nabu.conf` is the single source of truth:
+
+```
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+```
+
+To allow password logins for the `nabu` user (for example once you set a password for the lock screen):
+
+```bash
+sudo nabu-ssh-password on    # writes /etc/ssh/sshd_config.d/10-nabu-password.conf
+sudo nabu-ssh-password off   # back to key-only
+```
+
+> **Why root uses `*` and not `passwd -l`** — the `sshd_config` shipped by Arch Linux ARM leaves `UsePAM` at its default of `no`. Without PAM, OpenSSH refuses *key* logins for accounts whose shadow entry is `!`-prefixed, so `passwd -l root` would silently break root-over-SSH. The `*` hash gives the same "no password can ever work" guarantee without that side effect.
 
 SSH is enabled by default. Connect after boot:
 ```bash

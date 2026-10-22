@@ -215,8 +215,11 @@ if command -v dtc >/dev/null 2>&1; then
         slpi_ok=0
         if [ -n "${slpi_line}" ]; then
             slpi_block=$(sed -n "${slpi_line},$((slpi_line + 40))p" "${SLPI_DTS_DUMP}")
+            # The DT property is `firmware-name` (no qcom, prefix — that only
+            # exists on some other nodes); a bare `firmware-name` grep also
+            # matches a qcom,firmware-name variant.
             if grep -q 'status = "okay";' <<< "${slpi_block}" \
-                && grep -q 'qcom,firmware-name = "qcom/sm8150/xiaomi/nabu/slpi_nb.mbn";' <<< "${slpi_block}"; then
+                && grep -q 'firmware-name = "qcom/sm8150/xiaomi/nabu/slpi_nb.mbn";' <<< "${slpi_block}"; then
                 slpi_ok=1
             fi
         fi

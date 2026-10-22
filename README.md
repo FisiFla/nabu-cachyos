@@ -165,12 +165,53 @@ NABU_OLD_LABEL=linux NABU_NEW_LABEL=userdata bash relabel-partition.sh
 If the tablet's partition is already named `linux`, `flash.sh` detects that and
 skips the check.
 
+**Alternative: dual boot.** If you want to keep the Android install (ROM +
+Magisk + its boot slot) *and* have this OS, don't rename — carve a `linux`
+partition out of the end of `userdata` instead (see
+[Dual boot (carve a linux partition)](#dual-boot-carve-a-linux-partition-keep-android)).
+
+### Dual boot (carve a linux partition, keep Android)
+
+The stock table has no unallocated space — `userdata` runs to the last usable
+LBA — so keeping Android means cutting the new `linux` partition out of the
+**end** of `userdata`. The helper shrinks the userdata entry, appends a new
+`linux` entry and rewrites both GPT copies with fresh CRCs (same surgery
+`tools/gpt-relabel.py` does for the rename; the carve mode is
+`tools/gpt-carve.py`).
+
+What is preserved: the Android ROM, Magisk and the Android boot slot are
+untouched; switching back and forth is `fastboot set_active a` / `set_active
+b`. What is lost: userdata's *contents* — the partition is block-encrypted
+and spans its full size, so after the carve the smaller partition must be
+reformatted: boot Android once and let it format (recommended), or format it
+from recovery with `make_f2fs`. Commit this step only if the (encrypted, thus
+unreadable) app data is expendable.
+
+```bash
+# tablet booted into a recovery with root (TWRP) or Android with root:
+bash carve-linux-partition.sh           # from a release bundle
+bash release/carve-linux-partition.sh   # from a git checkout
+bash release/carve-linux-partition.sh --dry-run
+bash release/carve-linux-partition.sh --gib 50        # default: 30 GiB
+```
+
+It detects the UFS LUN 0 block device, auto-detects the root mode (recovery
+adbd that is already root, no `su` binary — or `su` on a rooted ROM), pulls
+both GPT regions, patches them with `tools/gpt-carve.py` (overlap and sliver
+guards, identical partition GUIDs across both copies), writes them back and
+verifies by reading the table again.
+
+Flash the rootfs to the carved partition with the standard
+[flash instructions](#flash-instructions); this project's `boot.img` then goes
+to the *other* slot (`fastboot set_active b` first) so Android keeps its own.
+
 ### Step by step
 
 1. **Rename the root partition** (once per device), from Android with root:
    ```bash
    bash relabel-partition.sh
    ```
+   (dual boot instead: `bash carve-linux-partition.sh` — see above.)
 
 2. **Put the tablet in fastboot mode**: hold **Vol Down + Power** until the fastboot screen appears.
 
@@ -404,9 +445,11 @@ nabu-cachyos/
 │   ├── flash.sh                # Flashes an unsplit local image set via fastboot
 │   ├── inject-ssh-key.sh       # Optionally injects a local SSH public key into linux.img
 │   ├── join-and-flash.sh       # Reassembles split rootfs parts, then runs flash.sh
-│   └── relabel-partition.sh    # Renames the GPT partition userdata -> linux
+│   ├── relabel-partition.sh    # Renames the GPT partition userdata -> linux
+│   └── carve-linux-partition.sh # Dual boot: carves linux out of userdata's tail
 ├── tools/
 │   ├── gpt-relabel.py          # Patches the GPT partition name and both CRCs
+│   ├── gpt-carve.py            # Carves a new partition out of another one's tail
 │   └── verify-alarm-tarball.sh # GPG-verifies the downloaded ALARM rootfs tarball
 ├── test/
 │   ├── build-test-kernel.sh    # Builds a QEMU-virt kernel from the same source tree

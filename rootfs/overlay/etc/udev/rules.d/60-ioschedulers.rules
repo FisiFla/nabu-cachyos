@@ -1,2 +1,11 @@
-# ADIOS I/O scheduler (CachyOS custom) for UFS storage
-ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="adios"
+# ADIOS I/O scheduler (CachyOS custom) for the UFS storage.
+#
+# udev matches ATTR{} against the FULL /sys/class/block/sdX/queue/scheduler
+# string — the list of schedulers the kernel offers, with the active one in
+# brackets. Gating on "*adios*" therefore means "adios is available", not
+# "adios is active": if the ADIOS patch was skipped (it does not apply
+# cleanly on every sm8150 tree), the write is skipped instead of failing for
+# every device on every boot. mq-deadline is the fallback so the shipped
+# behavior at least matches CachyOS x86_64's scheduler policy.
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}=="*adios*", ATTR{queue/scheduler}="adios"
+ACTION=="add|change", KERNEL=="sd[a-z]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}!="*adios*", ATTR{queue/scheduler}="mq-deadline"

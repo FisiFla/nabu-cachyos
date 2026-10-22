@@ -45,7 +45,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
 - Auto-login via GDM, connect to WiFi via GNOME Settings (touch-friendly)
 - **First-run welcome dialog** (`nabu-welcome`) — touch-friendly GTK4 app that runs once on first login with shortcuts to set a password (none by default), install apps, and read the README
-- **Tablet-style power button** — short press suspends, long press powers off (instead of systemd's default "every press powers off")
+- **Tablet-style power button** — short press does nothing, long press still powers off (instead of systemd's default "every press powers off"). The shipped `logind.conf.d/50-power-button.conf` uses `HandlePowerKey=ignore`; see Known Limitations for why suspend is not wired to the short press.
 - **`qbootctl` mark-boot-successful** — runs once after multi-user.target so the bootloader's A/B retry counter resets cleanly on every successful boot (slot B no longer drifts toward unbootable)
 - **NTP at boot** (`systemd-timesyncd`) — fixes the RTC drifting to year 2063 on cold boot, which breaks every SSL cert and pacman signature check
 
@@ -284,7 +284,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 | Category | Feature | Status |
 |---|---|---|
 | **Kernel** | BORE scheduler v5.9.6 | Applied |
-| | ADIOS I/O scheduler | Applied + active |
+| | ADIOS I/O scheduler | Skipped (patch conflict — see Known Limitations) |
 | | 1000Hz timer tick | Applied |
 | | Full preemption (PREEMPT) | Applied |
 | | BBR3 TCP | Applied (the 6.14 `tcp_input.c` conflict is gone on the 6.17 tree) |

@@ -79,6 +79,18 @@ install -Dm644 "${KERNEL_DIR}/sm8150-xiaomi-nabu.dtb" \
 mkdir -p "${ROOTFS}/usr/lib/modules"
 cp -a "${KERNEL_DIR}/modules/lib/modules/." "${ROOTFS}/usr/lib/modules/"
 
+# The kernel boots fine without modules, which makes a mismatched rootfs
+# (image built from an older kernel's modules) look healthy until the screen
+# stays black and there is no WiFi: on the 7.3 nabu configs DRM/MSM, ath10k,
+# touch, fastrpc and the remoteprocs are all modules. Fail here instead of
+# shipping an image whose /lib/modules does not match its kernel.
+if [ ! -d "${ROOTFS}/usr/lib/modules/${KERNEL_RELEASE}" ]; then
+    echo "ERROR: no modules directory for kernel release ${KERNEL_RELEASE}"
+    echo "       in ${ROOTFS}/usr/lib/modules — the rootfs would boot with no"
+    echo "       display, network or touch. Rebuild the kernel first."
+    exit 1
+fi
+
 # 3. Install CachyOS patches and config for runtime kernel-update script
 echo "Installing CachyOS patches to /opt/nabu-cachyos/..."
 mkdir -p "${ROOTFS}/opt/nabu-cachyos/patches"

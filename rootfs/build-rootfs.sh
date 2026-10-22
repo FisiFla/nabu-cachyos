@@ -71,8 +71,13 @@ install -Dm644 "${KERNEL_DIR}/Image.gz" \
 install -Dm644 "${KERNEL_DIR}/sm8150-xiaomi-nabu.dtb" \
     "${ROOTFS}/boot/efi/sm8150-xiaomi-nabu.dtb"
 
-# Install kernel modules
-cp -a "${KERNEL_DIR}/modules/lib/modules" "${ROOTFS}/usr/lib/modules"
+# Install kernel modules. Copy the CONTENTS (trailing slash) rather than the
+# parent directory itself: if /usr/lib/modules ever comes to exist in the base
+# rootfs (a package could create it), copying the parent verbatim would nest
+# everything to /usr/lib/modules/modules/<release> and every module would
+# fail to load at boot.
+mkdir -p "${ROOTFS}/usr/lib/modules"
+cp -a "${KERNEL_DIR}/modules/lib/modules/." "${ROOTFS}/usr/lib/modules/"
 
 # 3. Install CachyOS patches and config for runtime kernel-update script
 echo "Installing CachyOS patches to /opt/nabu-cachyos/..."
@@ -245,7 +250,11 @@ fi
 
 for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config cachyos-packageinstaller; do
     echo "  Building ${tool}..."
-    cd "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}"
+    # set -e: a renamed upstream directory would abort the WHOLE build here.
+    cd "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}" || {
+        echo "    WARNING: ${tool} not found in CachyOS-PKGBUILDS (renamed upstream?), skipping"
+        continue
+    }
     sudo -u builder makepkg -f --noconfirm --nodeps --skipinteg 2>&1 || {
         echo "    WARNING: ${tool} failed, skipping"
         continue

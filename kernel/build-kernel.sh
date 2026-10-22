@@ -177,6 +177,15 @@ cp arch/arm64/boot/Image.gz "${OUTPUT_DIR}/"
 cp arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb "${OUTPUT_DIR}/"
 make "${MAKE_ARGS[@]}" modules_install INSTALL_MOD_PATH="${OUTPUT_DIR}/modules"
 
+# modules_install leaves absolute "build" and "source" symlinks pointing at
+# the container's build tree (e.g. /tmp/kernel-build/linux). They are copied
+# verbatim into the flashed rootfs by the image stage and confuse anything
+# that follows them; module loading does not need them. Remove them from
+# every module directory regardless of naming.
+find "${OUTPUT_DIR}/modules/lib/modules" -mindepth 1 -maxdepth 2 \
+    \( -name build -o -name source \) -type l \
+    -delete 2>/dev/null || true
+
 # Record the real kernel release string.
 #
 # KERNEL_VERSION is the *branch tag* of the sm8150-mainline fork

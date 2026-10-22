@@ -33,7 +33,11 @@ fi
 build_and_install() {
     local subdir="$1"
     echo "  Building ${subdir}..."
-    cd "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}"
+    # set -e: a renamed upstream directory would abort the WHOLE build here.
+    cd "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}" || {
+        echo "    WARNING: ${subdir} not found in CachyOS-PKGBUILDS (renamed upstream?), skipping"
+        return 0
+    }
 
     # Build as non-root user. These are arch=any theming packages so deps are
     # already in the rootfs from pacstrap. Use --nodeps to skip host dep checks.

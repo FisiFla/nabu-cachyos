@@ -34,7 +34,12 @@ meson setup builddir --prefix=/usr --buildtype=release
 meson compile -C builddir
 meson install -C builddir
 DESTDIR="${ROOTFS}" meson install -C builddir
-ldconfig
+# Refresh the TARGET rootfs' linker cache. A bare `ldconfig` here would
+# refresh the builder container's /usr, which does nothing for the image.
+# libqrtr lands in /usr/lib (on glibc's default search path today), but the
+# cache must say so inside the rootfs or the daemons it links could fail to
+# start if that path ever changes.
+ldconfig -r "${ROOTFS}"
 
 # 2. Build qmic (QMI compiler) — needed to generate rmtfs source files
 echo "  [2/4] Building qmic..."

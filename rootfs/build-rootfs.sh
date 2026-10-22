@@ -569,6 +569,11 @@ NMSDEOF
 echo "Building Qualcomm userspace services from source..."
 bash "${SCRIPT_DIR}/build-qualcomm.sh" "${ROOTFS}"
 
+# build-qualcomm.sh's ldconfig ran with -r against this rootfs (it cannot
+# arch-chroot itself). Run ldconfig inside the rootfs as well so the cache
+# also covers anything the two stages disagree on ordering-wise.
+arch-chroot "${ROOTFS}" ldconfig
+
 # NAS-218: enable hexagonrpcd units NOW (they were just installed by
 # build-qualcomm.sh stage 6). Enabling them earlier silently no-op'd because
 # the unit files didn't exist yet. All three are enabled; ConditionPathExists

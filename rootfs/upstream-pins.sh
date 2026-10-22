@@ -21,8 +21,11 @@ RMTFS_COMMIT="b30a3eb38f9af283f18dbd3c7755653efc52c094"
 TQFTPSERV_COMMIT="0bf5b98c24229b0042554d99bb1509d813219f36"
 # https://github.com/linux-msm/qbootctl (A/B slot HAL)
 QBOOTCTL_COMMIT="39a6e6daaf029fb0a083777679a15ea2c18f72de"
-# https://github.com/linux-msm/hexagonrpc (SLPI FastRPC bridge) — previous pin
-HEXAGONRPC_COMMIT="dd9ac70c026e1bad93e8cffa3801255b8ceb551e"
+# https://github.com/linux-msm/hexagonrpc (SLPI FastRPC bridge)
+# da7a374 = v0.5.0 line (interp4 protobuf work, 2026-09-15). Adds no new
+# kernel ioctls — safe bump on the sm8150/6.17 kernel. The -S static-PD
+# patch in tools/ is rebased on top of this commit.
+HEXAGONRPC_COMMIT="da7a3742ab8d5273a281b70ee11f16fb2cb6a690"
 # https://github.com/CachyOS/CachyOS-PKGBUILDS (theming + tools recipes)
 CACHYOS_PKGBUILDS_COMMIT="4acf89f06990f13ce43c74ef6bb2f0a9cf496a8c"
 # https://github.com/ohmyzsh/ohmyzsh (zsh plugins)

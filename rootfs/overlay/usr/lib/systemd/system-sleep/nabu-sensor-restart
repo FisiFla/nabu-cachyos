@@ -1,14 +1,19 @@
 #!/usr/bin/bash
-# Systemd sleep hook: runs around every suspend cycle with
-#   $1 = "pre" | "post"
-# iio-sensor-proxy does not survive SLPI suspend states — its cached
-# discovery state goes stale once the Sensor Manager service restarts.
-# Stopping it at suspend and starting it after resume forces a fresh
-# probe of the QRTR sensor services (the wait-for-slpi-sensors
-# ExecStartPre it carries covers the ready-wait).
+# Systemd sleep hook: stop iio-sensor-proxy before suspend.
+#
+# iio-sensor-proxy does not survive SLPI suspend states: its cached SSC
+# discovery goes stale once the Sensor Manager service restarts, so it has to
+# be re-probed on resume.
+#
+# Only the stop happens here. The start lives in hexagonrpcd-resume.service:
+# iio-sensor-proxy carries Wants=/After= on the hexagonrpcd unit that the
+# resume unit starts, so starting the proxy from this hook (which runs inside
+# the suspend.target transaction) is refused by systemd with
+# "Transaction for iio-sensor-proxy.service/start is destructive", and the
+# proxy then stays dead until someone starts it by hand.
 case "${1:-}" in
-    pre)  systemctl stop  iio-sensor-proxy.service 2>/dev/null || true ;;
-    post) systemctl start iio-sensor-proxy.service 2>/dev/null || true ;;
+    pre) systemctl stop iio-sensor-proxy.service 2>/dev/null || true ;;
+    post) : ;;
     *) : ;;
 esac
 exit 0

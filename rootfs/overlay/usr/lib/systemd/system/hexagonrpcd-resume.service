@@ -9,9 +9,15 @@ Type=oneshot
 # Only the topology that is actually live on this kernel is touched; see
 # /usr/local/bin/nabu-sensor-bridge.
 ExecStart=/usr/local/bin/nabu-sensor-bridge start
+# iio-sensor-proxy was stopped before suspend (see the nabu-sensor-restart
+# sleep hook) because its cached SSC discovery goes stale. It has to be
+# started here rather than from the hook: the hook runs inside the
+# suspend.target transaction, where starting a unit that Wants= the daemon we
+# are still starting below is rejected as a conflicting transaction.
+ExecStart=/usr/bin/systemctl start iio-sensor-proxy.service
 NoNewPrivileges=yes
 PrivateTmp=yes
-PrivateDevices=closed
+PrivateDevices=yes
 ProtectSystem=strict
 
 [Install]

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# KERNEL_VERSION is the *branch tag* of the sm8150-mainline kernel
+# (e.g. 6.17-wifi-fix) — it is NOT the kernel release string. The release
+# string is produced by the kernel build and recorded in
+# output/kernel/kernel-release.
 KERNEL_VERSION="${KERNEL_VERSION:?KERNEL_VERSION not set}"
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
@@ -13,7 +17,21 @@ KERNEL_DIR="/build/output/kernel"
 FIRMWARE_DIR="/build/output/firmware/nabu-firmware"
 SLPI_BUNDLE_DIR="/build/output/firmware/slpi-bundle"
 
-echo "--- Building rootfs ---"
+# The kernel release string is what /lib/modules, the kernel image name and
+# the mkinitcpio preset must agree on. It is written by kernel/build-kernel.sh.
+KERNEL_RELEASE_FILE="${KERNEL_DIR}/kernel-release"
+if [ ! -f "${KERNEL_RELEASE_FILE}" ]; then
+    echo "ERROR: ${KERNEL_RELEASE_FILE} not found."
+    echo "  The kernel stage has to run first — it records the real kernel"
+    echo "  release string (e.g. 6.17.0-sm8150-gc22201bb8db6-dirty) there."
+    exit 1
+fi
+KERNEL_RELEASE="$(tr -d '[:space:]' < "${KERNEL_RELEASE_FILE}")"
+if [ -z "${KERNEL_RELEASE}" ]; then
+    echo "ERROR: ${KERNEL_RELEASE_FILE} is empty."
+    exit 1
+fi
+echo "--- Building rootfs (kernel release: ${KERNEL_RELEASE}) ---"
 
 # 1. Bootstrap Arch ARM (cached: skip pacstrap if cache tarball exists)
 PACSTRAP_CACHE="/build/.cache/pacstrap-rootfs.tar"
@@ -46,7 +64,7 @@ fi
 echo "Installing kernel..."
 mkdir -p "${ROOTFS}/boot/efi"
 install -Dm644 "${KERNEL_DIR}/Image.gz" \
-    "${ROOTFS}/boot/efi/vmlinuz-${KERNEL_VERSION}-cachyos-nabu"
+    "${ROOTFS}/boot/efi/vmlinuz-${KERNEL_RELEASE}-cachyos-nabu"
 install -Dm644 "${KERNEL_DIR}/sm8150-xiaomi-nabu.dtb" \
     "${ROOTFS}/boot/efi/sm8150-xiaomi-nabu.dtb"
 
@@ -150,9 +168,12 @@ else
 fi
 
 # 6. Install mkinitcpio preset (use sed instead of envsubst for portability)
+# The preset is templated with the real kernel release string, so mkinitcpio
+# resolves the kernel image and the module directory of the kernel that was
+# actually built.
 echo "Configuring mkinitcpio..."
 mkdir -p "${ROOTFS}/etc/mkinitcpio.d"
-sed "s/\${KERNEL_VERSION}/${KERNEL_VERSION}/g" "${SCRIPT_DIR}/mkinitcpio-nabu.preset" \
+sed "s|\${KERNEL_RELEASE}|${KERNEL_RELEASE}|g" "${SCRIPT_DIR}/mkinitcpio-nabu.preset" \
     > "${ROOTFS}/etc/mkinitcpio.d/nabu-cachyos.preset"
 
 # 7. Build AUR packages
@@ -585,12 +606,53 @@ SSHEOF
 
 # --- End live-debugging fixes ---
 
-# 11. Generate initramfs (non-fatal: warnings about autodetect/microcode are expected in chroot)
+# 11. Generate initramfs
+#
+# The initramfs is optional for this setup: ext4 and GPT are built into the
+# kernel and boot.img carries no initrd=, so the tablet boots straight from
+# the ext4 root. It is still generated because the preset has to resolve the
+# kernel image and /lib/modules/<release> — a failure there means the
+# kernel and the rootfs disagree, which used to be swallowed silently.
 echo "Generating initramfs..."
-arch-chroot "${ROOTFS}" mkinitcpio -p nabu-cachyos || {
-    echo "WARNING: mkinitcpio had errors but initramfs may still be usable"
-    ls -la "${ROOTFS}/boot/efi/initramfs-"* 2>/dev/null || echo "  No initramfs found!"
+INITRAMFS="${ROOTFS}/boot/efi/initramfs-${KERNEL_RELEASE}-cachyos-nabu.img"
+
+# mkinitcpio's autodetect hook needs /proc, /sys and /dev inside the
+# chroot to resolve the root device and the loaded modules.
+CHROOT_MOUNTS=()
+chroot_mount() {
+    local tgt="$1"; shift
+    mkdir -p "${tgt}"
+    if mount "$@" "${tgt}" 2>/dev/null; then
+        CHROOT_MOUNTS+=("${tgt}")
+    else
+        echo "WARNING: could not mount ${tgt} — some mkinitcpio hooks may misbehave"
+    fi
 }
+chroot_unmount_all() {
+    local m
+    for m in ${CHROOT_MOUNTS[@]+"${CHROOT_MOUNTS[@]}"}; do
+        umount "${m}" 2>/dev/null || true
+    done
+    CHROOT_MOUNTS=()
+}
+chroot_mount "${ROOTFS}/proc" -t proc proc
+chroot_mount "${ROOTFS}/sys" -t sysfs sysfs
+chroot_mount "${ROOTFS}/dev" --rbind /dev
+mkinitcpio_status=0
+arch-chroot "${ROOTFS}" mkinitcpio -p nabu-cachyos || mkinitcpio_status=$?
+chroot_unmount_all
+
+if [ "${mkinitcpio_status}" -ne 0 ]; then
+    echo "WARNING: mkinitcpio failed (exit ${mkinitcpio_status}) — no initramfs was generated."
+    echo "  The tablet still boots: ext4 and GPT are built into the kernel and"
+    echo "  boot.img has no initrd=, so no initramfs is required at runtime."
+    echo "  This used to be swallowed silently; it is now reported."
+elif [ ! -f "${INITRAMFS}" ]; then
+    echo "ERROR: mkinitcpio reported success but ${INITRAMFS} does not exist."
+    exit 1
+else
+    echo "  Initramfs: ${INITRAMFS}"
+fi
 
 # 12. fstab (ext4 root, FAT32 ESP, factory /persist for sensor calibration)
 cat > "${ROOTFS}/etc/fstab" << 'FSTAB'

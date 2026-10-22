@@ -3,10 +3,15 @@
 # historical reasons. There is no actual ESP and no GRUB — the boot.img
 # embeds the kernel directly. Don't change these paths without also
 # updating rootfs/build-rootfs.sh.
+#
+# The kernel release string (e.g. 6.17.0-sm8150-gc22201bb8db6-dirty) is
+# substituted into the paths below by rootfs/build-rootfs.sh. It must match
+# /lib/modules/<release> exactly, otherwise mkinitcpio cannot find the
+# modules.
 
 ALL_config="/etc/mkinitcpio.conf"
-ALL_kver="/boot/efi/vmlinuz-${KERNEL_VERSION}-cachyos-nabu"
+ALL_kver="/boot/efi/vmlinuz-${KERNEL_RELEASE}-cachyos-nabu"
 
 PRESETS=('default')
 
-default_image="/boot/efi/initramfs-${KERNEL_VERSION}-cachyos-nabu.img"
+default_image="/boot/efi/initramfs-${KERNEL_RELEASE}-cachyos-nabu.img"

@@ -16,8 +16,12 @@ echo
 echo "To actually update the kernel, do this from the build host (the"
 echo "MacBook with the nabu-cachyos repo checked out):"
 echo
-echo "  1. Build a new boot.img with the desired kernel version:"
-echo "       KERNEL_VERSION=x.y.z ./build.sh"
+echo "  1. Build a new boot.img with the desired kernel branch:"
+echo "       KERNEL_VERSION=6.17-wifi-fix ./build.sh"
+echo "     KERNEL_VERSION is the sm8150-mainline BRANCH TAG (the build"
+echo "     clones 'sm8150/<KERNEL_VERSION>'), not a version number — the"
+echo "     release string is derived from the branch by the kernel build"
+echo "     and ends up in output/kernel/kernel-release."
 echo "     (or edit the default KERNEL_VERSION in build.sh)"
 echo
 echo "  2. Package the release artifacts:"

@@ -129,6 +129,27 @@ cp arch/arm64/boot/Image.gz "${OUTPUT_DIR}/"
 cp arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb "${OUTPUT_DIR}/"
 make "${MAKE_ARGS[@]}" modules_install INSTALL_MOD_PATH="${OUTPUT_DIR}/modules"
 
+# Record the real kernel release string.
+#
+# KERNEL_VERSION is the *branch tag* of the sm8150-mainline fork
+# (e.g. 6.17-wifi-fix). The release string is what the kernel itself
+# reports (e.g. 6.17.0-sm8150-gc22201bb8db6-dirty) and is what
+# /lib/modules, the kernel image name and the mkinitcpio preset have to
+# agree on. The rootfs stage reads it from this file.
+KERNEL_RELEASE="$(make -s "${MAKE_ARGS[@]}" kernelrelease 2>/dev/null | tail -n 1)"
+if [ -z "${KERNEL_RELEASE}" ]; then
+    echo "ERROR: could not determine the kernel release string (make kernelrelease)."
+    exit 1
+fi
+# The directory modules_install just created is the authoritative name.
+MODULES_RELEASE="$(find "${OUTPUT_DIR}/modules/lib/modules" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | head -n 1)"
+if [ -n "${MODULES_RELEASE}" ] && [ "${MODULES_RELEASE}" != "${KERNEL_RELEASE}" ]; then
+    echo "WARNING: kernelrelease (${KERNEL_RELEASE}) differs from the module"
+    echo "         directory (${MODULES_RELEASE}) — using the module directory."
+    KERNEL_RELEASE="${MODULES_RELEASE}"
+fi
+printf '%s\n' "${KERNEL_RELEASE}" > "${OUTPUT_DIR}/kernel-release"
+
 # Create Android boot.img (direct boot, no GRUB)
 echo "Creating boot.img..."
 cat "${OUTPUT_DIR}/Image.gz" "${OUTPUT_DIR}/sm8150-xiaomi-nabu.dtb" > "${OUTPUT_DIR}/Image.gz-dtb"
@@ -146,5 +167,6 @@ rm "${OUTPUT_DIR}/Image.gz-dtb"
 echo "--- Kernel build complete ---"
 echo "  Image: ${OUTPUT_DIR}/Image.gz"
 echo "  DTB:   ${OUTPUT_DIR}/sm8150-xiaomi-nabu.dtb"
+echo "  Release: ${KERNEL_RELEASE}"
 echo "  Modules: ${OUTPUT_DIR}/modules/"
 echo "  boot.img: ${BOOT_IMG_OUT}"

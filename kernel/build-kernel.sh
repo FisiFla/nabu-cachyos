@@ -39,23 +39,54 @@ echo "  ARCH=${ARCH}  CROSS_COMPILE=${CROSS_COMPILE:-<native>}  CC=${CC:-<defaul
 echo "  BUILD_DIR=${BUILD_DIR}"
 echo "  OUTPUT_DIR=${OUTPUT_DIR}"
 
-# Clone kernel source (persistent BUILD_DIR enables incremental rebuilds
-# across runs — only changed patches force a re-extract).
+# Clone kernel source (persistent BUILD_DIR enables incremental rebuilds;
+# when the patch set or the upstream branch HEAD changes, the tree below is
+# re-extracted — see the sentinel fingerprint logic).
+KERNEL_URL="${KERNEL_URL:-https://gitlab.com/sm8150-mainline/linux.git}"
+LOCAL_KERNEL_REF="sm8150/${KERNEL_VERSION}"
+PATCH_SENTINEL=".cachyos-patches-applied"
+
+# Fingerprint = upstream branch HEAD + every patch body. One cheap ls-remote
+# query resolves the HEAD so a moved upstream can't be masked by a cached
+# tree; editing any .patch changes the hash. Either change forces a clean
+# re-extract instead of silently keeping the old tree.
+REMOTE_HEAD="$(git ls-remote "${KERNEL_URL}" "refs/heads/${LOCAL_KERNEL_REF}" 2>/dev/null | awk '{print $1}')"
+if [ -z "${REMOTE_HEAD}" ]; then
+    echo "WARNING: could not resolve remote HEAD for ${LOCAL_KERNEL_REF}; sentinel covers patch content only."
+    REMOTE_HEAD="<unresolved>"
+fi
+EXPECTED_SENTINEL="$( { echo "${REMOTE_HEAD}"; cat "${SCRIPT_DIR}"/patches/*.patch; } | sha256sum | awk '{print $1}')"
+
+needs_clone=0
 if [ ! -d "${BUILD_DIR}/linux/.git" ]; then
-    echo "Cloning kernel source..."
+    needs_clone=1
+elif [ ! -f "${BUILD_DIR}/linux/${PATCH_SENTINEL}" ] \
+        || ! grep -qx "${EXPECTED_SENTINEL}" "${BUILD_DIR}/linux/${PATCH_SENTINEL}" 2>/dev/null; then
+    echo "Reusing kernel tree at ${BUILD_DIR}/linux"
+    echo "  Patch set or upstream branch changed — re-extracting."
     rm -rf "${BUILD_DIR}/linux"
-    git clone --depth 1 --branch "sm8150/${KERNEL_VERSION}" \
-        https://gitlab.com/sm8150-mainline/linux.git "${BUILD_DIR}/linux"
+    needs_clone=1
 else
     echo "Reusing existing kernel tree at ${BUILD_DIR}/linux"
+fi
+if [ "${needs_clone}" = "1" ]; then
+    echo "Cloning kernel source..."
+    rm -rf "${BUILD_DIR}/linux"
+    git clone --depth 1 --branch "${LOCAL_KERNEL_REF}" \
+        "${KERNEL_URL}" "${BUILD_DIR}/linux"
 fi
 
 cd "${BUILD_DIR}/linux"
 
-# Apply CachyOS patches. We track whether the tree is already patched via
-# a sentinel file so re-runs don't double-apply.
-PATCH_SENTINEL=".cachyos-patches-applied"
-if [ ! -f "${PATCH_SENTINEL}" ]; then
+# Apply CachyOS patches. The sentinel above embeds the upstream HEAD and a
+# hash of all patch bodies, so re-runs never double-apply and never keep an
+# outdated patch revision.
+PATCH_SENTINEL_USED=0
+if [ -f "${PATCH_SENTINEL}" ] && grep -qx "${EXPECTED_SENTINEL}" "${PATCH_SENTINEL}" 2>/dev/null; then
+    PATCH_SENTINEL_USED=1
+    echo "Patches already applied (sentinel stamped, content verified)"
+fi
+if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
     # BORE (0001) is critical. Others are best-effort — the kernel works without them.
     # NAS-218 / NAS-247: the fastrpc INIT_CREATE_STATIC pageslen fix is also
     # critical — without it, SLPI sensorspd PD-create fails with EPIPE and the
@@ -63,7 +94,8 @@ if [ ! -f "${PATCH_SENTINEL}" ]; then
     # way on nabu (the I2C path is TrustZone-blocked, see add-sensors.sh).
     CRITICAL_PATCHES=("0001-bore" "0005-fastrpc-fix-init-create-static-pageslen")
     echo "Applying patches..."
-    for patch in "${SCRIPT_DIR}/patches/"*.patch; do
+    unshallowed=0
+    for patch in "${SCRIPT_DIR}"/patches/*.patch; do
         patchname="$(basename "${patch}")"
         echo "  Applying ${patchname}..."
         is_critical=false
@@ -75,6 +107,24 @@ if [ ! -f "${PATCH_SENTINEL}" ]; then
             echo "    OK"
         elif git apply --3way "${patch}" 2>/dev/null; then
             echo "    OK (3-way merge)"
+        elif [ "${unshallowed}" = "0" ] && [ -f .git/shallow ] \
+                && [ "${KERNEL_NO_UNSHALLOW:-0}" != "1" ]; then
+            # --3way needs the base blobs the patch's index lines reference;
+            # a --depth 1 clone doesn't have them. Fetch the full branch
+            # history once (large, one-time) and retry. Opt out with
+            # KERNEL_NO_UNSHALLOW=1 when bandwidth matters.
+            echo "    shallow clone lacks 3-way base blobs — fetching full history (one-time)..."
+            git fetch --unshallow origin "${LOCAL_KERNEL_REF}" 2>/dev/null || true
+            unshallowed=1
+            if git apply --3way "${patch}" 2>/dev/null; then
+                echo "    OK (3-way merge after unshallow)"
+            elif ${is_critical}; then
+                echo "    FATAL: critical patch ${patchname} failed to apply. Aborting."
+                exit 1
+            else
+                echo "    WARNING: ${patchname} did not apply cleanly, skipping."
+                echo "    The kernel will work without it."
+            fi
         elif ${is_critical}; then
             echo "    FATAL: critical patch ${patchname} failed to apply. Aborting."
             exit 1
@@ -83,9 +133,7 @@ if [ ! -f "${PATCH_SENTINEL}" ]; then
             echo "    The kernel will work without it."
         fi
     done
-    touch "${PATCH_SENTINEL}"
-else
-    echo "Patches already applied (sentinel: ${PATCH_SENTINEL})"
+    echo "${EXPECTED_SENTINEL}" > "${PATCH_SENTINEL}"
 fi
 
 # Apply optional device tree modifications.

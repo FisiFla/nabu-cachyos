@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export KERNEL_VERSION="${KERNEL_VERSION:-6.17-wifi-fix}"
+export KERNEL_VERSION="${KERNEL_VERSION:-7.3-nabu}"
 
 echo "=== CachyOS Nabu Builder ==="
 echo "Kernel version: ${KERNEL_VERSION}"

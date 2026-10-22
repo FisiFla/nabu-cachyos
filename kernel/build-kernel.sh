@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KERNEL_VERSION="${KERNEL_VERSION:?KERNEL_VERSION not set}"
+# Historical branch tag of the sm8150-mainline tree. Only used to derive the
+# default KERNEL_REF below, so it may be omitted when KERNEL_REF is set.
+KERNEL_VERSION="${KERNEL_VERSION:-7.3-nabu}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Where the kernel tree gets cloned/built. Default keeps the historical
@@ -34,17 +36,28 @@ MAKE_ARGS=("ARCH=${ARCH}")
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "$(dirname "${BOOT_IMG_OUT}")"
 
-echo "--- Kernel Build: sm8150/${KERNEL_VERSION} ---"
+# Kernel source. Defaults to Kumar-Jy's nabu tree (7.3), which carries the
+# tested Xiaomi Pad 5 support: Novatek touch, CS35L41 speakers, Iris VPU
+# video decode, qcom_bms charger, PSCI deep sleep, keyboard/hall, idtp9418.
+# The old sm8150-mainline tree is still reachable with
+#   KERNEL_URL=https://gitlab.com/sm8150-mainline/linux.git KERNEL_REF=sm8150/6.17-wifi-fix
+KERNEL_URL="${KERNEL_URL:-https://github.com/Kumar-Jy/linux.git}"
+KERNEL_REF="${KERNEL_REF:-nabu/7.3.y}"
+LOCAL_KERNEL_REF="${KERNEL_REF}"
+# Optional commit pin; when set the shallow clone is moved onto exactly that
+# commit. Leave empty to follow the branch tip (the sentinel still tracks it).
+KERNEL_COMMIT="${KERNEL_COMMIT:-}"
+PATCH_SENTINEL=".cachyos-patches-applied"
+
+# Base config: nabu_defconfig is the tree's own Xiaomi Pad 5 config (it
+# already includes the sm8150 fragment). Override both for other trees.
+KERNEL_DEFCONFIG="${KERNEL_DEFCONFIG:-nabu_defconfig}"
+KERNEL_FRAGMENTS="${KERNEL_FRAGMENTS-arch/arm64/configs/sm8150.config}"
+
+echo "--- Kernel Build: ${KERNEL_REF} ---"
 echo "  ARCH=${ARCH}  CROSS_COMPILE=${CROSS_COMPILE:-<native>}  CC=${CC:-<default>}"
 echo "  BUILD_DIR=${BUILD_DIR}"
 echo "  OUTPUT_DIR=${OUTPUT_DIR}"
-
-# Clone kernel source (persistent BUILD_DIR enables incremental rebuilds;
-# when the patch set or the upstream branch HEAD changes, the tree below is
-# re-extracted — see the sentinel fingerprint logic).
-KERNEL_URL="${KERNEL_URL:-https://gitlab.com/sm8150-mainline/linux.git}"
-LOCAL_KERNEL_REF="sm8150/${KERNEL_VERSION}"
-PATCH_SENTINEL=".cachyos-patches-applied"
 
 # Fingerprint = upstream branch HEAD + every patch body. One cheap ls-remote
 # query resolves the HEAD so a moved upstream can't be masked by a cached
@@ -55,7 +68,7 @@ if [ -z "${REMOTE_HEAD}" ]; then
     echo "WARNING: could not resolve remote HEAD for ${LOCAL_KERNEL_REF}; sentinel covers patch content only."
     REMOTE_HEAD="<unresolved>"
 fi
-EXPECTED_SENTINEL="$( { echo "${REMOTE_HEAD}"; cat "${SCRIPT_DIR}"/patches/*.patch; } | sha256sum | awk '{print $1}')"
+EXPECTED_SENTINEL="$( { echo "${KERNEL_COMMIT:-${REMOTE_HEAD}}"; cat "${SCRIPT_DIR}"/patches/*.patch; } | sha256sum | awk '{print $1}')"
 
 needs_clone=0
 if [ ! -d "${BUILD_DIR}/linux/.git" ]; then
@@ -77,6 +90,15 @@ if [ "${needs_clone}" = "1" ]; then
 fi
 
 cd "${BUILD_DIR}/linux"
+
+# Move the shallow clone onto the pinned commit when one is given.
+if [ -n "${KERNEL_COMMIT}" ]; then
+    if [ "$(git rev-parse HEAD)" != "${KERNEL_COMMIT}" ]; then
+        echo "Pinning kernel tree to ${KERNEL_COMMIT}..."
+        git fetch --depth 1 origin "${KERNEL_COMMIT}"
+        git checkout --detach FETCH_HEAD
+    fi
+fi
 
 # Apply CachyOS patches. The sentinel above embeds the upstream HEAD and a
 # hash of all patch bodies, so re-runs never double-apply and never keep an
@@ -111,12 +133,15 @@ if [ -f "${PATCH_SENTINEL}" ] && grep -qx "${EXPECTED_SENTINEL}" "${PATCH_SENTIN
     echo "Patches already applied (sentinel stamped, content verified)"
 fi
 if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
-    # BORE (0001) is critical. Others are best-effort — the kernel works without them.
-    # NAS-218 / NAS-247: the fastrpc INIT_CREATE_STATIC pageslen fix is also
-    # critical — without it, SLPI sensorspd PD-create fails with EPIPE and the
-    # entire sensor stack stays dead. Sensor hardware is unreachable any other
-    # way on nabu (the I2C path is TrustZone-blocked, see add-sensors.sh).
-    CRITICAL_PATCHES=("0001-bore" "0005-fastrpc-fix-init-create-static-pageslen")
+    # BORE (0001) is critical on the old 6.17 tree; the 7.3 nabu tree builds
+    # fine without the CachyOS patch set, so it can be emptied there with
+    # KERNEL_CRITICAL_PATCHES="" to make every patch best-effort.
+    # NAS-218 / NAS-247: the fastrpc INIT_CREATE_STATIC pageslen fix is critical
+    # on 6.17 — without it, SLPI sensorspd PD-create fails with EPIPE and the
+    # entire sensor stack stays dead (the I2C path is TrustZone-blocked, see
+    # add-sensors.sh). The 7.3 tree reworked that path, so it is optional there.
+    # shellcheck disable=SC2206  # deliberate word splitting of a space-separated list
+    CRITICAL_PATCHES=(${KERNEL_CRITICAL_PATCHES:-0001-bore 0005-fastrpc-fix-init-create-static-pageslen})
     echo "Applying patches..."
     unshallowed=0
     for patch in "${SCRIPT_DIR}"/patches/*.patch; do
@@ -182,13 +207,18 @@ if [ -x "${SCRIPT_DIR}/enable-slpi.sh" ]; then
     bash "${SCRIPT_DIR}/enable-slpi.sh"
 fi
 
-# Build config: defconfig + sm8150 fragment + cachyos fragment
-# Note: sm8150.config is a fragment at arch/arm64/configs/sm8150.config, NOT a defconfig target.
-# We must use merge_config.sh to layer it on top of defconfig.
-echo "Configuring kernel..."
-make "${MAKE_ARGS[@]}" defconfig
+# Build config: the tree's base config plus the CachyOS fragment.
+# nabu_defconfig already folds in the sm8150 fragment; the old sm8150-mainline
+# tree instead needs `defconfig` + arch/arm64/configs/sm8150.config, which is
+# what KERNEL_DEFCONFIG/KERNEL_FRAGMENTS select.
+echo "Configuring kernel (${KERNEL_DEFCONFIG})..."
+make "${MAKE_ARGS[@]}" "${KERNEL_DEFCONFIG}"
+CONFIG_FRAGMENTS=()
+for frag in ${KERNEL_FRAGMENTS}; do
+    [ -f "${frag}" ] && CONFIG_FRAGMENTS+=("${frag}")
+done
 scripts/kconfig/merge_config.sh -m .config \
-    arch/arm64/configs/sm8150.config \
+    ${CONFIG_FRAGMENTS[@]+"${CONFIG_FRAGMENTS[@]}"} \
     "${SCRIPT_DIR}/cachyos.config"
 make "${MAKE_ARGS[@]}" olddefconfig
 

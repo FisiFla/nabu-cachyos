@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# KERNEL_VERSION is the *branch tag* of the sm8150-mainline kernel
-# (e.g. 6.17-wifi-fix) — it is NOT the kernel release string. The release
-# string is produced by the kernel build and recorded in
+# KERNEL_VERSION is only a label for the selected kernel tree (default
+# 7.3-nabu); it is NOT the kernel release string. The release string is
+# produced by the kernel build (make kernelrelease) and recorded in
 # output/kernel/kernel-release.
-KERNEL_VERSION="${KERNEL_VERSION:?KERNEL_VERSION not set}"
+KERNEL_VERSION="${KERNEL_VERSION:-7.3-nabu}"
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
 

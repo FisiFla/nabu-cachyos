@@ -44,4 +44,4 @@ No `CONFIG_FASTRPC` (mainline) anywhere. **Downstream uses an entirely separate 
 
 - [`crdroid-reference-2026-05-24.md`](../crdroid-reference-2026-05-24.md) — narrative writeup of the four subsystems' deltas + path-to-fix per subsystem.
 - crDroid kernel source: https://github.com/crdroidandroid/android_kernel_xiaomi_sm8150 (4.14 downstream, includes `drivers/char/adsprpc.c` + `drivers/cpuidle/lpm-levels*.c`)
-- Mainline sm8150 fork we build against: https://gitlab.com/sm8150-mainline/linux (branch `sm8150/6.17-wifi-fix` per our `KERNEL_VERSION`)
+- Kernel tree we build against: https://github.com/Kumar-Jy/linux (branch `nabu/7.3.y`); the dumps below were captured when the build still used https://gitlab.com/sm8150-mainline/linux (`sm8150/6.17-wifi-fix`)

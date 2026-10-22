@@ -26,7 +26,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 ## What This Is
 
 - **Arch Linux ARM** base system bootstrapped via `pacstrap` inside Docker
-- **CachyOS kernel** from [sm8150-mainline](https://gitlab.com/sm8150-mainline/linux) (branch `sm8150/6.17-wifi-fix`) with CachyOS patches: **BORE scheduler**, **BBR3 TCP**, 1000Hz timer, full preemption
+- **CachyOS kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (branch `nabu/7.3.y`, the tree the working XDA dual-boot builds use) with the CachyOS config fragment: 1000Hz timer, full preemption, Btrfs, zram/zstd, THP
 - **GNOME Shell** desktop on Wayland with **working on-screen keyboard** for touch input
 - **CachyOS GNOME settings** (dark theme, CachyOS wallpapers, dconf tuning)
 - **CachyOS theming and tools** built from PKGBUILDs, including `cachyos-gnome-settings`, `cachyos-wallpapers`, `char-white`, `cachyos-plymouth-bootanimation`, `cachyos-fish-config`, `cachyos-zsh-config`, `cachyos-settings`, `cachyos-alacritty-config`, and `cachyos-packageinstaller`
@@ -51,8 +51,8 @@ This repo also contains a Docker-based build system to produce the image from sc
 
 ## What This Is NOT
 
-- **Not a port of CachyOS x86.** Most CachyOS packages are x86-only. This project uses the nabu-specific kernel from sm8150-mainline and applies only the architecture-neutral CachyOS kernel patches.
-- **Not using TheMojoMan's pre-built kernel.** The kernel is compiled from sm8150-mainline source with CachyOS patches (BORE, ADIOS, cachy-arm) layered on top. The `boot.img` contains the CachyOS kernel, not TheMojoMan's.
+- **Not a port of CachyOS x86.** Most CachyOS packages are x86-only. This project uses a nabu-specific kernel and applies only the architecture-neutral CachyOS kernel tweaks.
+- **Not using a pre-built kernel.** The kernel is compiled from source with the CachyOS config fragment layered on top of the nabu defconfig. The `boot.img` contains a kernel built here, never a downloaded one.
 - **Not a dual-boot setup.** This overwrites the Android userdata partition. The Android slot (slot A) is preserved as a fallback.
 
 ## Prerequisites
@@ -96,15 +96,15 @@ WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
 | 1/6 | `build.sh` | Downloads the ALARM rootfs tarball over HTTPS and verifies its GPG signature |
 | 2/6 | `build.sh` | Builds Docker image from `Dockerfile` + ALARM tarball |
 | 3/6 | `firmware/fetch-firmware.sh` | Clones [nabu firmware blobs](https://github.com/map220v/nabu-firmware) (WiFi, GPU, BT, audio) |
-| 4/6 | `kernel/build-kernel.sh` | Clones sm8150-mainline kernel, applies CachyOS patches, compiles `Image.gz` + DTB + modules |
+| 4/6 | `kernel/build-kernel.sh` | Clones the nabu kernel tree (`Kumar-Jy/linux` `nabu/7.3.y`), applies the CachyOS patches that still apply, compiles `Image.gz` + DTB + modules |
 | 5/6 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
 | 6/6 | `image/build-image.sh` | Creates the fastboot-flashed ext4 rootfs image (`linux.img.zst`) and checksums |
 
 **Rootfs tarball integrity:** the ALARM tarball is the base of the entire OS, so stage 1 downloads it over HTTPS (`https://ca.us.mirror.archlinuxarm.org`) together with the publisher's detached GPG signature and verifies it with `tools/verify-alarm-tarball.sh`. The publisher keyring is extracted from the tarball itself, and the **primary key fingerprint is pinned in the repository** (`68B3537F39A313B3E574D06777193F152BDBE6A6`, "Arch Linux ARM Build System") — a swapped keyring or a mirrored download cannot change the verdict. The build fails closed on a bad signature. Use `ALARM_MIRROR=<url>` to fetch from another mirror, or `ALARM_ALLOW_UNVERIFIED=1` to downgrade to a warning on an air-gapped machine that already trusts its local copy.
 
-**Kernel branch vs release:** `KERNEL_VERSION` is the sm8150-mainline **branch tag** (e.g. `6.17-wifi-fix`), not a version number. The real release string (`6.17.0-sm8150-gc22201bb8db6-dirty`) is derived by the kernel build and recorded in `output/kernel/kernel-release`; the rootfs stage uses it for `/lib/modules`, the kernel image name and the mkinitcpio preset, so the kernel and the rootfs can no longer disagree about it.
+**Kernel branch vs release:** the kernel source is selected by `KERNEL_URL` + `KERNEL_REF` (defaults: `https://github.com/Kumar-Jy/linux.git` and `nabu/7.3.y`); `KERNEL_VERSION` is now only a label (default `7.3-nabu`). The old tree remains available with `KERNEL_URL=https://gitlab.com/sm8150-mainline/linux.git KERNEL_REF=sm8150/6.17-wifi-fix KERNEL_DEFCONFIG=defconfig`. The real release string is derived by the kernel build (`make kernelrelease`) and recorded in `output/kernel/kernel-release`; the rootfs stage uses it for `/lib/modules`, the kernel image name and the mkinitcpio preset, so the kernel and the rootfs can no longer disagree about it. Kernel config comes from `KERNEL_DEFCONFIG` (`nabu_defconfig`, which already folds in the sm8150 fragment) plus any files in `KERNEL_FRAGMENTS` plus `kernel/cachyos.config`.
 
-**Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`) and built kernel artifacts (`output/kernel/`) persist between builds on every platform. The compiler cache and kernel tree differ by platform: on **Linux x86_64** (host cross-compile path) they live in `.cache/kernel-build-<KERNEL_VERSION>/` and `.cache/ccache/`; inside **Docker** (the default macOS path) they live in the named volumes `nabu-kernel-build` (kernel source tree) and `nabu-ccache` — `docker volume rm nabu-kernel-build` and/or `nabu-ccache` force a full kernel rebuild. The previous behavior (kernel built in a throwaway container `/tmp`) rebuilt the kernel from scratch every time; delete the volumes if disk space matters more than the next build's speed.
+**Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`) and built kernel artifacts (`output/kernel/`) persist between builds on every platform. The compiler cache and kernel tree differ by platform: on **Linux x86_64** (host cross-compile path) they live in `.cache/kernel-build-<KERNEL_REF>/` and `.cache/ccache/`; inside **Docker** (the default macOS path) they live in the named volumes `nabu-kernel-build` (kernel source tree) and `nabu-ccache` — `docker volume rm nabu-kernel-build` and/or `nabu-ccache` force a full kernel rebuild. The previous behavior (kernel built in a throwaway container `/tmp`) rebuilt the kernel from scratch every time; delete the volumes if disk space matters more than the next build's speed.
 
 **Host kernel cross-compile (Linux x86_64 only):** When `aarch64-linux-gnu-gcc` and `mkbootimg` are present, `build.sh` builds the kernel natively on the host before launching Docker (stage 2.5/6). This skips qemu-aarch64 emulation entirely and brings the kernel compile from ~2 hours down to ~10-15 minutes. Force the legacy in-container path with `USE_HOST_KERNEL_BUILD=0`.
 
@@ -309,7 +309,7 @@ ssh nabu@<tablet-ip>            # via IP address
 - **`cachyos-packageinstaller`** -- AUR PKGBUILD currently fails on aarch64 against ALARM headers; the build catches and skips it. No alternative GUI installer is shipped right now.
 - **`dbus-broker` replaced with `dbus-daemon`** -- the sm8150 mainline kernel lacks namespace support required by dbus-broker
 - **Pen pressure sensitivity** -- does not work in landscape mode (known upstream issue)
-- **CachyOS kernel patches** -- ADIOS and cachy-arm patches still don't apply cleanly against the sm8150 tree and are skipped (build continues without them). BORE and BBR3 _do_ apply on the 6.17 tree.
+- **CachyOS kernel patches** -- on the 7.3 nabu tree the CachyOS patch set is best-effort and currently skipped (BORE/BBR3/ADIOS/cachy-arm are version-tuned for 6.16/6.17). The build continues without them; only the config fragment (`kernel/cachyos.config`) applies. On the older 6.17 tree BORE and BBR3 apply.
 
 ### Why GNOME instead of KDE?
 
@@ -329,7 +329,7 @@ This build achieves roughly **82% parity** with a full CachyOS x86 desktop insta
 | | ADIOS I/O scheduler | Skipped (patch conflict — see Known Limitations) |
 | | 1000Hz timer tick | Applied |
 | | Full preemption (PREEMPT) | Applied |
-| | BBR3 TCP | Applied (the 6.14 `tcp_input.c` conflict is gone on the 6.17 tree) |
+| | BBR3 TCP | Applied on the 6.17 tree; skipped on 7.3 (mainline BBR is used) |
 | | sched-ext | Config enabled + `scx-scheds` userspace tools shipped (start with `systemctl start scx_lavd`) |
 | **System** | CachyOS sysctl tuning | Full (via cachyos-settings) |
 | | MGLRU | Enabled |
@@ -402,7 +402,7 @@ Applied via overlay configs in `rootfs/overlay/` and the `cachyos-settings` pack
 | Patch | Description | Status |
 |---|---|---|
 | `0001-bore.patch` | BORE CPU scheduler | Critical -- build fails if this doesn't apply |
-| `0002-bbr3.patch` | BBR3 TCP congestion control | Applied on the 6.17 tree |
+| `0002-bbr3.patch` | BBR3 TCP congestion control | Applied on the 6.17 tree; skipped on 7.3 |
 | `0003-adios.patch` | ADIOS I/O scheduler | Best-effort |
 | `0004-cachy-arm.patch` | ARM-compatible bits from CachyOS (HZ options, PREEMPT_LAZY, THP tuning, v4l2loopback) | Best-effort |
 
@@ -509,7 +509,8 @@ This project would not be possible without the work of these projects and people
 
 - **[TheMojoMan](https://github.com/TheMojoMan/xiaomi-nabu)** -- Boot.img and UEFI firmware for nabu.
 - **[linux-msm](https://github.com/linux-msm)** -- Qualcomm userspace daemons (qrtr, rmtfs, tqftpserv) built from source for WiFi support.
-- **[sm8150-mainline](https://gitlab.com/sm8150-mainline/linux)** -- Mainline Linux kernel with Snapdragon 855 (sm8150) support, the foundation for nabu Linux support.
+- **[Kumar-Jy/linux](https://github.com/Kumar-Jy/linux)** -- Xiaomi Pad 5 (nabu) kernel tree (`nabu/7.3.y`): touch, speakers, Iris video decode, charger, deep sleep, keyboard/hall, stylus charger.
+- **[sm8150-mainline](https://gitlab.com/sm8150-mainline/linux)** -- Mainline Linux kernel with Snapdragon 855 (sm8150) support; the previous kernel base (still selectable with `KERNEL_REF`).
 - **[CachyOS](https://cachyos.org/)** -- Kernel patches (BORE, BBR3, ADIOS), theming packages, system tuning configs, and PKGBUILD recipes via [CachyOS-PKGBUILDS](https://github.com/CachyOS/CachyOS-PKGBUILDS).
 - **[map220v](https://github.com/map220v/nabu-firmware)** -- Nabu-specific firmware blobs (WiFi WCN3991, Adreno 640 GPU, Bluetooth, audio codec) required for hardware functionality.
 - **[Arch Linux ARM](https://archlinuxarm.org/)** -- The base system and package repositories.

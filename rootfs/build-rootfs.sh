@@ -220,10 +220,10 @@ for pkg in "${aur_packages[@]}"; do
         echo "  WARNING: makepkg failed for ${pkg}, skipping"
         continue
     }
-    pkgfile=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
+    pkgfile=$(find "${AUR_BUILD}/${pkg}" -maxdepth 1 -name '*.pkg.tar*' -print -quit 2>/dev/null)
     if [ -n "${pkgfile}" ]; then
         pacman -U --noconfirm --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
-            "${AUR_BUILD}/${pkg}/${pkgfile}"
+            "${pkgfile}"
         echo "    Installed ${pkgfile}"
     else
         echo "  WARNING: ${pkg} produced no package file, skipping"
@@ -259,12 +259,12 @@ for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config cachyos
         echo "    WARNING: ${tool} failed, skipping"
         continue
     }
-    pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
+    pkg=$(find "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}" -maxdepth 1 -name '*.pkg.tar*' -print -quit 2>/dev/null)
     if [ -n "${pkg}" ]; then
         # Double --nodeps (-dd): skip dep *name* checks too, not just versions.
         # See the matching comment in build-theming.sh for the rationale.
         pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
-            "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}/${pkg}"
+            "${pkg}"
         echo "    Installed ${pkg}"
     fi
 done

@@ -55,10 +55,10 @@ build_and_install() {
     # that kills a non-tty build. Double `--nodeps` skips all dep checks —
     # safe for theming because the missing deps are cosmetic plugins.
     local pkg
-    pkg=$(ls -1 *.pkg.tar* 2>/dev/null | head -1)
+    pkg=$(find "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}" -maxdepth 1 -name '*.pkg.tar*' -print -quit 2>/dev/null)
     if [ -n "${pkg}" ]; then
         pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
-            "${THEME_BUILD}/CachyOS-PKGBUILDS/${subdir}/${pkg}"
+            "${pkg}"
         echo "    Installed ${pkg}"
     else
         echo "    WARNING: No package produced for ${subdir}"

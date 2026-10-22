@@ -58,5 +58,5 @@ else
     echo "SLPI firmware + hexagonfs already staged at ${SLPI_STAGE_DIR}."
 fi
 
-echo "  SLPI firmware: $(ls -lh "${SLPI_STAGE_DIR}/slpi_nb.mbn" 2>/dev/null | awk '{print $5}') @ ${SLPI_STAGE_DIR}/slpi_nb.mbn"
+echo "  SLPI firmware: $(du -h "${SLPI_STAGE_DIR}/slpi_nb.mbn" 2>/dev/null | awk '{print $1}') @ ${SLPI_STAGE_DIR}/slpi_nb.mbn"
 echo "  Hexagonfs:     $(find "${SLPI_STAGE_DIR}/hexagonfs" -type f 2>/dev/null | wc -l | tr -d ' ') files @ ${SLPI_STAGE_DIR}/hexagonfs"

@@ -76,7 +76,7 @@ echo "  Rootfs image: ${OUTPUT}/linux.img.zst ($(du -h "${OUTPUT}/linux.img.zst"
 # 3. Generate SHA256 checksums
 echo "Generating checksums..."
 cd "${OUTPUT}"
-sha256sum *.img *.zst 2>/dev/null > SHA256SUMS || true
+sha256sum ./*.img ./*.zst 2>/dev/null > SHA256SUMS || true
 cat SHA256SUMS
 
 echo ""

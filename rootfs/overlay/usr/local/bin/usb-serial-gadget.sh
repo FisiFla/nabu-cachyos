@@ -39,7 +39,11 @@ mkdir -p functions/acm.usb0
 ln -sf functions/acm.usb0 configs/c.1/
 
 # Bind to UDC
-UDC=$(ls /sys/class/udc/ 2>/dev/null | head -1)
+udc_entries=(/sys/class/udc/*)
+UDC=""
+if [ -e "${udc_entries[0]}" ]; then
+    UDC="$(basename "${udc_entries[0]}")"
+fi
 if [ -n "${UDC}" ]; then
     echo "${UDC}" > UDC
     echo "USB serial gadget enabled on ${UDC}"

@@ -18,6 +18,38 @@ for f in boot.img linux.img.zst vbmeta_disabled.img; do
     [ -f "${SCRIPT_DIR}/${f}" ] || { echo "ERROR: ${f} not found in ${SCRIPT_DIR}/"; exit 1; }
 done
 
+# Verify the bundle against the shipped SHA256SUMS before touching the
+# device: a truncated download flashes a corrupt rootfs and the tablet
+# round-trip makes recovery awkward. SHA256SUMS covers the split archive
+# parts (linux.img.zst is derived from them); a bundle without the file,
+# or a host without a sha256 tool, only warns.
+verify_bundle() {
+    if [ "${SKIP_SHA256_CHECK:-0}" = "1" ]; then
+        echo "SKIP_SHA256_CHECK=1 set — skipping SHA256SUMS verification."
+        return 0
+    fi
+    if [ ! -f "${SCRIPT_DIR}/SHA256SUMS" ]; then
+        echo "WARNING: SHA256SUMS missing — skipping integrity verification. Re-download the release if anything misbehaves."
+        return 0
+    fi
+    local rc=0
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "${SCRIPT_DIR}" && sha256sum --quiet -c SHA256SUMS) || rc=1
+    elif command -v shasum >/dev/null 2>&1; then
+        (cd "${SCRIPT_DIR}" && shasum -a 256 --quiet -c SHA256SUMS) || rc=1
+    else
+        echo "WARNING: neither sha256sum nor shasum found — skipping integrity verification."
+        return 0
+    fi
+    if [ "${rc}" != "0" ]; then
+        echo "ERROR: SHA256SUMS verification failed — the bundle is incomplete or corrupted."
+        echo "Re-download the release. To flash anyway (NOT recommended): SKIP_SHA256_CHECK=1"
+        exit 1
+    fi
+    echo "  SHA256SUMS verified."
+}
+verify_bundle
+
 # Check device
 echo "Checking device connection..."
 fastboot devices | grep -q . || { echo "ERROR: No device found. Boot tablet into fastboot (Vol Down + Power)."; exit 1; }
@@ -120,9 +152,40 @@ echo "[2/5] Flashing CachyOS kernel..."
 fastboot flash boot_b "${SCRIPT_DIR}/boot.img"
 
 echo "[3/5] Preparing rootfs..."
+# A stale linux.img from another build must not be reused silently:
+# re-decompress when the .zst is newer, and fail the file from image-size.txt
+# when it does not match what this bundle declares (auto-recovers by
+# re-decompressing, which is exactly the safe answer here).
+NEED_DECOMPRESS=0
 if [ ! -f "${SCRIPT_DIR}/linux.img" ]; then
+    NEED_DECOMPRESS=1
+elif [ "${SCRIPT_DIR}/linux.img.zst" -nt "${SCRIPT_DIR}/linux.img" ]; then
+    echo "  linux.img is stale (older than linux.img.zst) — re-decompressing."
+    NEED_DECOMPRESS=1
+fi
+if [ "${NEED_DECOMPRESS}" = "1" ]; then
     command -v zstd >/dev/null || { echo "ERROR: zstd not found. Install: brew install zstd"; exit 1; }
-    zstd -d "${SCRIPT_DIR}/linux.img.zst" -o "${SCRIPT_DIR}/linux.img"
+    zstd -d -f "${SCRIPT_DIR}/linux.img.zst" -o "${SCRIPT_DIR}/linux.img"
+fi
+
+if [ -f "${SCRIPT_DIR}/image-size.txt" ]; then
+    REQUIRED_MB=$(sed -n 's/^IMG_SIZE_MB=//p' "${SCRIPT_DIR}/image-size.txt" | tail -n 1)
+    case "${REQUIRED_MB}" in
+        ''|*[!0-9]*) : ;;
+        *)
+            if stat -f %z "${SCRIPT_DIR}/linux.img" >/dev/null 2>&1; then
+                IMG_BYTES=$(stat -f %z "${SCRIPT_DIR}/linux.img")
+            elif stat -c %s "${SCRIPT_DIR}/linux.img" >/dev/null 2>&1; then
+                IMG_BYTES=$(stat -c %s "${SCRIPT_DIR}/linux.img")
+            fi
+            if [ "${IMG_BYTES:-0}" -ne "$(( REQUIRED_MB * 1024 * 1024 ))" ]; then
+                echo "  linux.img is $(( IMG_BYTES / 1024 / 1024 ))MB but image-size.txt declares ${REQUIRED_MB}MB — stale image from another build. Re-decompressing."
+                rm -f "${SCRIPT_DIR}/linux.img"
+                command -v zstd >/dev/null || { echo "ERROR: zstd not found. Install: brew install zstd"; exit 1; }
+                zstd -d -f "${SCRIPT_DIR}/linux.img.zst" -o "${SCRIPT_DIR}/linux.img"
+            fi
+            ;;
+    esac
 fi
 
 if [ "${SKIP_SSH_KEY_INJECTION:-0}" != "1" ] && [ -x "${SSH_KEY_HELPER}" ]; then

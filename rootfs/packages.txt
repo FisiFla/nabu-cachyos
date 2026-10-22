@@ -42,6 +42,7 @@ iwd
 libqmi
 libssc
 linux-firmware
+linux-firmware-qcom
 loupe
 lsof
 man-db

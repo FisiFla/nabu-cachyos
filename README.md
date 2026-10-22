@@ -10,8 +10,9 @@ running on the mainline-derived nabu kernel with CachyOS tuning.
 - **Arch Linux ARM** rootfs, bootstrapped with `pacstrap` inside Docker
 - **Kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (`nabu/7.3.y`) plus the CachyOS config fragment (1000 Hz, full preemption, Btrfs, zram/zstd, THP)
 - **GNOME Shell 51 on Wayland** with a working on-screen keyboard, CachyOS theming and dconf tuning
-- **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity + accelerometer, USB serial console, **suspend/resume**
-- **Supported by the kernel, not yet verified end to end:** quad speakers (CS35L41), charger, Iris video decode, magnetic keyboard/cover
+- **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity + accelerometer, USB serial console, **suspend/resume**, **battery reporting**
+- **Supported by the kernel, not yet verified end to end:** quad speakers (CS35L41), charger, magnetic keyboard/cover, stylus buttons
+- **Known broken:** hardware video decode (Iris) — see [Known limitations](#known-limitations)
 - **Tablet UX:** GDM auto-login, no lock screen, tablet-sized UI, power button ignored on short press (long press still powers off)
 - `paru` + the CachyOS tool set (`cachyos-settings`, wallpapers, Plymouth animation, zsh/fish configs, Alacritty)
 - **Direct boot** — Android bootimg format, no GRUB, no UEFI
@@ -193,6 +194,13 @@ accounts, so `passwd -l root` would break root over SSH.
 ## Known limitations
 
 - **Camera** — no mainline driver on nabu.
+- **Hardware video decode (Iris)** — the `qcom_iris` driver binds and the VPU
+  firmware boots, but every session open ends in `HFI session open failed`
+  (no response to `HFI_CMD_SYS_SESSION_INIT` within 1 s), so `h264_v4l2m2m`
+  cannot decode. Playing video works via the CPU (mpv/ffmpeg software decode).
+  The node is additionally gated behind `qcom_iris.allow_fw_boot=1`
+  (`/etc/modprobe.d/qcom-iris.conf`), which is *not* shipped since decode does
+  not work yet. Tracked in issue #41.
 - **Suspend** — `s2idle` works and sensors survive it: `hexagonrpcd-{suspend,resume}.service`
   stop and restart the live bridge (sdsp on 7.3, the adsp pair on older kernels) and a
   sleep hook re-probes `iio-sensor-proxy`, so accelerometer, light, proximity and

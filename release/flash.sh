@@ -29,9 +29,11 @@ echo ""
 # rename is a GPT surgery and has to happen while the device is still in
 # Android, before fastboot is entered.  Detect it here instead of flashing a
 # 9 GB image into a partition the kernel cannot find.
+# "(bootloader) " prefix or a space after the colon are both common; anchor
+# nothing, match "partition-size:<name>:" / "partition-size: <name>:".
 fastboot_has_partition() {
-    fastboot getvar all 2>/dev/null \
-        | grep -qE "^partition-(size|type):$1[[:space:]]"
+    fastboot getvar all 2>&1 \
+        | grep -qE "partition-(size|type): *$1 *:"
 }
 
 if ! fastboot_has_partition linux; then
@@ -52,6 +54,53 @@ if ! fastboot_has_partition linux; then
     exit 1
 fi
 echo "  Found 'linux' partition."
+echo ""
+
+# fastboot prints getvar results as "<name>: <value>" (sometimes behind a
+# "(bootloader) " prefix, and it may echo the name canonically with quoted
+# spaces). Match the name with optional spaces after each colon, and take
+# the value from the last colon-separated field of the matching line. An
+# unset/FAILED getvar becomes an empty string, not a set -e abort.
+fastboot_getvar() {
+    local name_pat="${1//:/[: ]*}"
+    fastboot getvar "$1" 2>&1 \
+        | grep -E "$name_pat" | tail -n 1 | awk -F': *' '{print $NF}'
+    return 0
+}
+
+# The image has to fit the partition flashed by `fastboot flash linux`:
+# fastboot cannot grow partitions, so catch the mismatch BEFORE the
+# 4-minute flash instead of after it. image-size.txt records the required
+# size and is shipped in every release bundle. Repair it (IMG_SIZE_MB=<n>)
+# if you rebuilt the rootfs yourself.
+if [ -f "${SCRIPT_DIR}/image-size.txt" ]; then
+    REQUIRED_MB=$(sed -n 's/^IMG_SIZE_MB=//p' "${SCRIPT_DIR}/image-size.txt" | tail -n 1)
+    case "${REQUIRED_MB}" in
+        ''|*[!0-9]*)
+            echo "WARNING: image-size.txt does not parse (IMG_SIZE_MB='${REQUIRED_MB}') — skipping the size check."
+            ;;
+        *)
+            PART_SIZE_HEX=$(fastboot_getvar partition-size:linux)
+            case "${PART_SIZE_HEX}" in
+                0[xX][0-9a-fA-F]*)
+                    PART_SIZE_MB=$(( $(printf '%d' "${PART_SIZE_HEX}") / 1024 / 1024 ))
+                    if [ "${PART_SIZE_MB}" -lt "${REQUIRED_MB}" ]; then
+                        echo "ERROR: the 'linux' partition is ${PART_SIZE_MB}MB but the image needs ${REQUIRED_MB}MB."
+                        echo "The partition layout cannot be grown from fastboot — see the README"
+                        echo "(Partition relabel) to replace the userdata-sized partition properly."
+                        exit 1
+                    fi
+                    echo "  Size check OK: partition ${PART_SIZE_MB}MB >= image ${REQUIRED_MB}MB."
+                    ;;
+                *)
+                    echo "WARNING: could not read the partition size (got '${PART_SIZE_HEX}') — skipping the size check."
+                    ;;
+            esac
+            ;;
+    esac
+else
+    echo "WARNING: image-size.txt missing — skipping the partition-size check."
+fi
 echo ""
 
 if [ "${FORCE_FLASH:-0}" = "1" ]; then

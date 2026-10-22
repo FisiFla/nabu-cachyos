@@ -65,6 +65,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 | Xiaomi Pad 5 | Bootloader must be unlocked |
 | USB-C cable | Direct connection between build machine and tablet |
 | fastboot / adb | `brew install android-platform-tools` on macOS |
+| `simg2img` | macOS only, flash only: `release/flash.sh` converts sparse images with it. The bundled `linux.img.zst` exceeds 256 MB and ships sparsed, so you need it before flashing: `brew install simg2img` |
 | Root access on the tablet | Needed once for the [partition relabel](#partition-relabel-userdata--linux) (Magisk, or any root solution that provides `su`) |
 | vbmeta_disabled.img | Required to disable Android Verified Boot. The repo does not fetch it automatically; copy it into `output/` or point `release/create-release.sh` at it with `VBMETA_SOURCE=...` |
 

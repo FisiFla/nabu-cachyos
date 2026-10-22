@@ -406,8 +406,57 @@ nabu-cachyos/
 ├── tools/
 │   ├── gpt-relabel.py          # Patches the GPT partition name and both CRCs
 │   └── verify-alarm-tarball.sh # GPG-verifies the downloaded ALARM rootfs tarball
+├── test/
+│   ├── build-test-kernel.sh    # Builds a QEMU-virt kernel from the same source tree
+│   ├── build-smoke-initramfs.sh# Tiny Alpine initramfs for the QEMU smoke test
+│   ├── test-qemu.sh            # Boots kernel(+initramfs / +rootfs) under QEMU locally
+│   └── log/                    # Serial transcripts (gitignored)
 └── output/                     # Build artifacts (boot.img, linux.img.zst, checksums, kernel/, firmware/)
 ```
+
+## Testing on your Mac (QEMU)
+
+Before you touch the tablet, you can sanity-check the userspace side of the
+OS on its own -- packages, systemd units, **sshd**, shells, boot ordering --
+by booting it under QEMU on your Mac. Nothing is installed on the host beyond
+QEMU and Docker (both via Homebrew); every build step runs in a container.
+
+```
+brew install qemu docker colima
+colima start                       # if the docker daemon is not running
+
+./test/build-test-kernel.sh        # ~10-40 min: kernel for QEMU's virt machine
+./test/test-qemu.sh --smoke        # layer 1: kernel boots, initramfs works
+./test/test-qemu.sh --prepare-only # downloads ArchLinuxARM base rootfs (GPG-
+                                   # verified with tools/verify-alarm-tarball.sh)
+                                   # and turns it into a 4 GB ext4 image
+./test/test-qemu.sh                # layer 2: boots that rootfs to a login prompt
+```
+
+Pass `--kernel <Image>` / `--rootfs <img>` to test other artifacts, `--accel tcg`
+on non-Apple-Silicon hosts, and `--timeout <seconds>` to change the watchdog.
+Serial transcripts are written to `test/log/`.
+
+What the `test/` kernel is: the same sm8150-mainline/6.17 source, built with
+`make virtconfig` (the kernel's own virtualization-guest config: virtio,
+PL011 serial, generic PCI host; SoC drivers dropped). It is a plain arm64
+`Image`, not the tablet's `Image.gz`+DTB `boot.img`, and it is never flashed.
+
+What this CAN test: the rootfs contents. All userspace -- package sets,
+service ordering, sshd config, login shells, filesystem integrity.
+
+What this CANNOT test: the tablet's hardware. QEMU's `-M virt` is a generic
+ARM virtual machine with no sm8150 DTS, so WiFi (WCN3991), the touchscreen,
+audio (SLPI/UCM), battery, and every other qcom peripheral are absent. Those
+still require the real device.
+
+Two deliberate differences vs the tablet boot, both correct here by design:
+
+- `root=/dev/vda` instead of `root=PARTLABEL=linux`: that partition label
+  comes from the Android GPT of the flashed device; the QEMU disk is a
+  plain ext4 image with no partition table.
+- `console=ttyAMA0` instead of the tablet's USB-serial gadget: ttyAMA0 is
+  the QEMU virt PL011 serial port.
 
 ## Credits and Attribution
 

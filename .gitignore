@@ -21,3 +21,6 @@ docs/superpowers/
 # postmarketOS panpanpanpan/nabu-firmware mirror or by re-pulling from
 # /vendor/firmware/CAMERA_ICP.elf on the running crDroid install.
 docs/crdroid-live/CAMERA_ICP.elf
+
+# QEMU test harness
+test/log/

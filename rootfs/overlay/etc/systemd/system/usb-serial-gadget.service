@@ -1,6 +1,9 @@
 [Unit]
-Description=USB Serial Gadget
+Description=USB Serial Gadget (debug console over USB-C)
 After=sys-kernel-config.mount
+# Opt-in only: the unit is off until the user creates the marker file
+# (e.g. `sudo nabu-serial-gadget enable`). The build does not enable it.
+ConditionPathExists=/etc/nabu/serial-gadget.enabled
 
 [Service]
 Type=oneshot

@@ -1,0 +1,42 @@
+#!/usr/bin/bash
+# Enable or disable the USB serial debug console (ACM gadget on /dev/ttyGS0).
+#
+# The console is OFF by default. Turning it on creates the marker file the
+# usb-serial-gadget.service unit checks (ConditionPathExists) and starts it;
+# turning it off removes the marker and stops the gadget + getty.
+set -euo pipefail
+
+MARKER="/etc/nabu/serial-gadget.enabled"
+
+usage() {
+    cat << 'EOF'
+Usage: nabu-serial-gadget enable|disable
+
+  enable   expose a serial console over the USB-C cable (ACM gadget)
+  disable  stop the console and return to default (off)
+
+The gadget is off by default because it exposes root-equivalent console
+access to anyone with a cable. Enable it only on a trusted cable.
+EOF
+}
+
+case "${1:-}" in
+    enable)
+        mkdir -p "$(dirname "${MARKER}")"
+        touch "${MARKER}"
+        systemctl daemon-reload 2>/dev/null || true
+        systemctl start usb-serial-gadget.service
+        echo "USB serial gadget enabled (marker: ${MARKER})."
+        echo "Console: /dev/ttyGS0 on the tablet, an /dev/cu.* device on the host."
+        ;;
+    disable)
+        rm -f "${MARKER}"
+        systemctl stop serial-getty@ttyGS0.service 2>/dev/null || true
+        systemctl stop usb-serial-gadget.service 2>/dev/null || true
+        echo "USB serial gadget disabled."
+        ;;
+    *)
+        usage >&2
+        exit 1
+        ;;
+esac

@@ -398,8 +398,9 @@ arch-chroot "${ROOTFS}" systemctl enable systemd-timesyncd.service
 # slot-retry-count drains 7→0 across reboots and the bootloader rolls back
 # to Android. Binary comes from build-qualcomm.sh.
 arch-chroot "${ROOTFS}" systemctl enable qbootctl-mark-success.service 2>/dev/null || true
-# USB serial gadget for debugging
-arch-chroot "${ROOTFS}" systemctl enable usb-serial-gadget.service 2>/dev/null || true
+# USB serial gadget: a debug console over USB-C. OFF by default — the unit
+# carries a ConditionPathExists on /etc/nabu/serial-gadget.enabled, which
+# only the `nabu-serial-gadget enable` helper creates. Do not enable it here.
 # ananicy-cpp ships inside cachyos-settings; enable best-effort in case that install ever skips
 arch-chroot "${ROOTFS}" systemctl enable ananicy-cpp.service 2>/dev/null || true
 # Auto-rotation full sensor stack (NAS-218).

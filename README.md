@@ -40,7 +40,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 - **MGLRU** enabled via tmpfiles for improved memory management
 - **ADIOS I/O scheduler** set via udev rules
 - **CachyOS branding**: custom `os-release`, fastfetch logo, Plymouth boot animation
-- **USB serial gadget** for debugging via USB-C cable
+- **USB serial debug console** over USB-C — **opt-in**: `sudo nabu-serial-gadget enable` starts an ACM serial console on `/dev/ttyGS0`; `sudo nabu-serial-gadget disable` turns it off again
 - **Direct boot** via Android boot.img format (CachyOS kernel + DTB, no GRUB)
 - WiFi, Bluetooth, touch screen, GPU acceleration (Adreno 640)
 - Auto-login via GDM, connect to WiFi via GNOME Settings (touch-friendly)

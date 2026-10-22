@@ -232,8 +232,9 @@ ORIGINAL_FIRST=$(region_list "${WORK_DIR}/primary.bin" "${PRIMARY_SKIP}" 1 \
     | awk -v src="${SOURCE_LABEL}" '$2 == src { print $3; exit }')
 ORIGINAL_LAST=$(region_list "${WORK_DIR}/primary.bin" "${PRIMARY_SKIP}" 1 \
     | awk -v src="${SOURCE_LABEL}" '$2 == src { print $4; exit }')
-[ -n "${ORIGINAL_FIRST}" ] && [ -n "${ORIGINAL_LAST}" ] \
-    || die "partition '${SOURCE_LABEL}' not found in the device's GPT"
+if [ -z "${ORIGINAL_FIRST}" ] || [ -z "${ORIGINAL_LAST}" ]; then
+    die "partition '${SOURCE_LABEL}' not found in the device's GPT"
+fi
 log "${SOURCE_LABEL} spans LBA ${ORIGINAL_FIRST}..${ORIGINAL_LAST}"
 
 # One GUID for both GPT copies: the partial-dump flow runs the tool twice,

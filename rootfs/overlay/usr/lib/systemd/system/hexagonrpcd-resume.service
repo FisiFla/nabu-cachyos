@@ -6,8 +6,9 @@ DefaultDependencies=no
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/systemctl start hexagonrpcd-adsp-rootpd.service
-ExecStart=/usr/bin/systemctl start hexagonrpcd-adsp-sensorspd.service
+# Only the topology that is actually live on this kernel is touched; see
+# /usr/local/bin/nabu-sensor-bridge.
+ExecStart=/usr/local/bin/nabu-sensor-bridge start
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=closed

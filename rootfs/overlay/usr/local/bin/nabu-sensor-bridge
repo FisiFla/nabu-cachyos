@@ -1,0 +1,42 @@
+#!/bin/bash
+# Start or stop the SLPI sensor bridge around suspend/resume.
+#
+# nabu has two possible topologies and only one is live at a time:
+#
+#   /dev/fastrpc-sdsp exists  -> the sensor PD is served through the SDSP node
+#                                (hexagonrpcd-sdsp.service). This is the 7.3
+#                                layout, and the adsp pair skips itself at boot
+#                                because its units carry
+#                                ConditionPathExists=!/dev/fastrpc-sdsp.
+#   otherwise                 -> the older ADSP pair (rootpd + sensorspd).
+#
+# Driving the ADSP pair on the 7.3 layout makes both units exit status=4
+# (they cannot attach to a node the sdsp daemon already owns), trip the
+# restart limit, and leave a permanently failed unit behind after every
+# resume. So pick the topology first and only touch the units that can work.
+set -u
+
+if [ -e /dev/fastrpc-sdsp ]; then
+    units=(hexagonrpcd-sdsp.service)
+else
+    units=(hexagonrpcd-adsp-rootpd.service hexagonrpcd-adsp-sensorspd.service)
+fi
+
+case "${1:-}" in
+    stop)
+        systemctl stop "${units[@]}" || true
+        ;;
+    start)
+        # Clear a start-limit trip left behind by an earlier boot layout, then
+        # start in dependency order (rootpd first when the adsp pair is used).
+        systemctl reset-failed "${units[@]}" \
+            hexagonrpcd-adsp-rootpd.service hexagonrpcd-adsp-sensorspd.service 2>/dev/null || true
+        for unit in "${units[@]}"; do
+            systemctl start "${unit}" || true
+        done
+        ;;
+    *)
+        echo "usage: nabu-sensor-bridge stop|start" >&2
+        exit 2
+        ;;
+esac

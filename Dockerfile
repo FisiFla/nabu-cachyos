@@ -1,4 +1,7 @@
 FROM scratch
+# The tarball below is the base of the whole OS. It is downloaded over HTTPS
+# and GPG-verified (pinned primary key fingerprint) by
+# tools/verify-alarm-tarball.sh before the image is ever built.
 ADD ArchLinuxARM-aarch64-latest.tar.gz /
 
 RUN pacman-key --init && pacman-key --populate archlinuxarm

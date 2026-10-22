@@ -92,12 +92,14 @@ WIFI_SSID="YourNetwork" WIFI_PASSWORD="YourPassword" ./build.sh
 
 | Stage | Script | What it does |
 |---|---|---|
-| 1/6 | `build.sh` | Downloads ALARM rootfs tarball (if not cached) |
+| 1/6 | `build.sh` | Downloads the ALARM rootfs tarball over HTTPS and verifies its GPG signature |
 | 2/6 | `build.sh` | Builds Docker image from `Dockerfile` + ALARM tarball |
 | 3/6 | `firmware/fetch-firmware.sh` | Clones [nabu firmware blobs](https://github.com/map220v/nabu-firmware) (WiFi, GPU, BT, audio) |
 | 4/6 | `kernel/build-kernel.sh` | Clones sm8150-mainline kernel, applies CachyOS patches, compiles `Image.gz` + DTB + modules |
 | 5/6 | `rootfs/build-rootfs.sh` | Bootstraps rootfs via `pacstrap`, installs kernel/firmware/packages, builds CachyOS theming + tools, configures system |
 | 6/6 | `image/build-image.sh` | Creates the fastboot-flashed ext4 rootfs image (`linux.img.zst`) and checksums |
+
+**Rootfs tarball integrity:** the ALARM tarball is the base of the entire OS, so stage 1 downloads it over HTTPS (`https://ca.us.mirror.archlinuxarm.org`) together with the publisher's detached GPG signature and verifies it with `tools/verify-alarm-tarball.sh`. The publisher keyring is extracted from the tarball itself, and the **primary key fingerprint is pinned in the repository** (`68B3537F39A313B3E574D06777193F152BDBE6A6`, "Arch Linux ARM Build System") — a swapped keyring or a mirrored download cannot change the verdict. The build fails closed on a bad signature. Use `ALARM_MIRROR=<url>` to fetch from another mirror, or `ALARM_ALLOW_UNVERIFIED=1` to downgrade to a warning on an air-gapped machine that already trusts its local copy.
 
 **Caching:** The pacstrap rootfs cache (`.cache/pacstrap-rootfs.tar`), the kernel source tree (`.cache/kernel-build-<KERNEL_VERSION>/`), the ccache directory (`.cache/ccache/`) and built kernel artifacts under `output/kernel/` all persist between builds. Delete the relevant subdirectory of `.cache/` and/or `output/kernel/` to force a full rebuild.
 
@@ -377,7 +379,8 @@ nabu-cachyos/
 │   ├── join-and-flash.sh       # Reassembles split rootfs parts, then runs flash.sh
 │   └── relabel-partition.sh    # Renames the GPT partition userdata -> linux
 ├── tools/
-│   └── gpt-relabel.py          # Patches the GPT partition name and both CRCs
+│   ├── gpt-relabel.py          # Patches the GPT partition name and both CRCs
+│   └── verify-alarm-tarball.sh # GPG-verifies the downloaded ALARM rootfs tarball
 └── output/                     # Build artifacts (boot.img, linux.img.zst, checksums, kernel/, firmware/)
 ```
 

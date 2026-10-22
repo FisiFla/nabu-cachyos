@@ -61,16 +61,44 @@ if [ "${USE_HOST_KERNEL_BUILD}" = "auto" ]; then
     fi
 fi
 
-# ─── Step 1: Download ALARM rootfs tarball ──────────────────────────
+# ─── Step 1: Download + verify ALARM rootfs tarball ──────────────────
+#
+# The tarball is the base of the whole OS (see Dockerfile), so it is
+# downloaded over HTTPS and verified against the publisher's detached GPG
+# signature with a pinned primary-key fingerprint. A tampered download is a
+# tampered OS and must never reach the tablet.
+#
+#   ALARM_MIRROR            mirror to fetch from (default: HTTPS mirror)
+#   ALARM_ALLOW_UNVERIFIED=1  skip verification (air-gapped builds only)
 
 ALARM_TARBALL="ArchLinuxARM-aarch64-latest.tar.gz"
+ALARM_SIGNATURE="${ALARM_TARBALL}.sig"
+# NOTE: os.archlinuxarm.org currently serves a certificate that does not
+# cover that hostname, so the mirror below is used instead. It serves the
+# identical os/ tree over a valid HTTPS certificate.
+ALARM_MIRROR="${ALARM_MIRROR:-https://ca.us.mirror.archlinuxarm.org}"
+
 if [ ! -f "${SCRIPT_DIR}/${ALARM_TARBALL}" ]; then
-    echo "[1/6] Downloading Arch Linux ARM rootfs tarball (~1GB)..."
-    curl -L -# -o "${SCRIPT_DIR}/${ALARM_TARBALL}" \
-        "http://os.archlinuxarm.org/os/${ALARM_TARBALL}"
+    echo "[1/6] Downloading Arch Linux ARM rootfs tarball (~800MB) from ${ALARM_MIRROR}..."
+    curl -fL --retry 3 --retry-delay 2 -# \
+        -o "${SCRIPT_DIR}/${ALARM_TARBALL}.part" \
+        "${ALARM_MIRROR}/os/${ALARM_TARBALL}"
+    mv "${SCRIPT_DIR}/${ALARM_TARBALL}.part" "${SCRIPT_DIR}/${ALARM_TARBALL}"
 else
     echo "[1/6] ALARM tarball present, skipping download."
 fi
+
+if [ ! -f "${SCRIPT_DIR}/${ALARM_SIGNATURE}" ]; then
+    echo "[1/6] Downloading detached GPG signature..."
+    curl -fL --retry 3 --retry-delay 2 -# \
+        -o "${SCRIPT_DIR}/${ALARM_SIGNATURE}.part" \
+        "${ALARM_MIRROR}/os/${ALARM_SIGNATURE}"
+    mv "${SCRIPT_DIR}/${ALARM_SIGNATURE}.part" "${SCRIPT_DIR}/${ALARM_SIGNATURE}"
+fi
+
+echo "[1/6] Verifying rootfs tarball signature..."
+bash "${SCRIPT_DIR}/tools/verify-alarm-tarball.sh" \
+    "${SCRIPT_DIR}/${ALARM_TARBALL}" "${SCRIPT_DIR}/${ALARM_SIGNATURE}"
 
 # ─── Step 2: Build Docker image ────────────────────────────────────
 

@@ -5,6 +5,7 @@ output/
 *.img
 *.img.zst
 *.tar.gz
+*.sig
 output.old/
 __pycache__/
 *.pyc

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KERNEL_VERSION="${KERNEL_VERSION:?KERNEL_VERSION not set}"
 # Rootfs is built in container-local filesystem (not on bind mount)
 ROOTFS="/tmp/rootfs-build"
 OUTPUT="/build/output"

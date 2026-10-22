@@ -133,16 +133,24 @@ fi
 
 # ─── Step 3: Run build inside Docker ───────────────────────────────
 
-# NOTE: Kernel builds inside the container's /tmp (case-sensitive).
-# Do NOT mount a macOS host volume for kernel source — macOS is
-# case-insensitive which breaks Linux kernel builds.
+# NOTE: Kernel builds inside the container go to the *named volume*
+# /kernel-build (case-sensitive, survives container rebuilds). Do NOT mount
+# a macOS host volume for kernel source — macOS is case-insensitive which
+# breaks Linux kernel builds. The compiler cache lives in /ccache for the
+# same reason; both are Docker named volumes, not the .cache/ bind mount the
+# Linux-host path uses.
 
 echo "[3/6] Starting build inside Docker container..."
 docker run --rm --privileged \
     -v "${SCRIPT_DIR}:/build" \
+    -v nabu-kernel-build:/kernel-build \
+    -v nabu-ccache:/ccache \
     -e KERNEL_VERSION="${KERNEL_VERSION}" \
     -e WIFI_SSID="${WIFI_SSID}" \
     -e WIFI_PASSWORD="${WIFI_PASSWORD}" \
+    -e BUILD_DIR=/kernel-build \
+    -e CCACHE_DIR=/ccache \
+    -e CC="ccache gcc" \
     nabu-cachyos-builder \
     /bin/bash -c "
         set -euo pipefail

@@ -15,7 +15,7 @@ RUN pacman -Syu --noconfirm && \
     base-devel bc bison flex dtc grub dosfstools btrfs-progs \
     mtools arch-install-scripts mkinitcpio git wget zstd parted \
     cpio android-tools python python-mako \
-    meson ninja systemd-libs
+    meson ninja systemd-libs ccache
 
 # Create non-root user for makepkg
 RUN useradd -m builder && \

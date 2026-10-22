@@ -7,11 +7,14 @@ CachyOS ARM for the **Xiaomi Pad 5 (nabu)** — the first CachyOS on an ARM tabl
 Download the [latest release](https://github.com/FisiFla/nabu-cachyos/releases/latest), then:
 
 1. Download **all files** from the release into one folder
-2. Boot tablet into fastboot: **Vol Down + Power**
-3. Run: `bash join-and-flash.sh`
-4. CachyOS boots in ~60 seconds with GNOME touch UI and the on-screen keyboard enabled by default
+2. **Rename the root partition** (one-time, from Android — see [Partition relabel](#partition-relabel-userdata--linux)):
+   `bash relabel-partition.sh`
+3. Boot tablet into fastboot: **Vol Down + Power**
+4. Run: `bash join-and-flash.sh`
+5. CachyOS boots in ~60 seconds with GNOME touch UI and the on-screen keyboard enabled by default
 
 Requirements: unlocked bootloader, USB-C cable, `fastboot` and `zstd` installed.
+`adb` with root access on the tablet is needed for step 2 (the partition rename).
 Optional: Docker running locally enables automatic SSH key injection into the image during flash.
 
 ---
@@ -62,6 +65,7 @@ This repo also contains a Docker-based build system to produce the image from sc
 | Xiaomi Pad 5 | Bootloader must be unlocked |
 | USB-C cable | Direct connection between build machine and tablet |
 | fastboot / adb | `brew install android-platform-tools` on macOS |
+| Root access on the tablet | Needed once for the [partition relabel](#partition-relabel-userdata--linux) (Magisk, or any root solution that provides `su`) |
 | vbmeta_disabled.img | Required to disable Android Verified Boot. The repo does not fetch it automatically; copy it into `output/` or point `release/create-release.sh` at it with `VBMETA_SOURCE=...` |
 
 ## Quick Start
@@ -121,12 +125,51 @@ cd release/dist
   - or an unsplit directory containing `flash.sh`, `boot.img`, `linux.img.zst`, and `vbmeta_disabled.img`
 - `fastboot` installed (`brew install android-platform-tools` on macOS)
 - `zstd` installed (`brew install zstd` on macOS)
+- `adb` installed and **root access on the tablet** — needed once, for the partition relabel below
+
+### Partition relabel (userdata → linux)
+
+The nabu kernel boots with `root=PARTLABEL=linux`. A stock Xiaomi partition table
+names that partition `userdata`, so the partition name has to be changed once
+before the rootfs can be flashed and mounted. This is GPT surgery: the
+partition name lives in the partition-entry array, and both the array CRC32 and
+the GPT header CRC32 have to be recomputed. **Both** GPT copies (primary at LBA
+1 and the backup at the end of the disk) must be patched, otherwise the
+firmware can fall back to the unpatched copy.
+
+Nothing is repartitioned, no data is moved, and Android slot A is left intact.
+The helper does it for you:
+
+```bash
+# tablet in Android, USB debugging enabled, root available
+bash relabel-partition.sh            # from a release bundle
+bash release/relabel-partition.sh    # from a git checkout
+```
+
+It detects the UFS LUN 0 block device, pulls the primary and backup GPT
+regions, patches the partition name and both CRCs with `tools/gpt-relabel.py`,
+writes them back and verifies the result by reading the table off the device
+again. `--dry-run` shows what would change without writing.
+
+Use it in the reverse direction to undo the rename:
+
+```bash
+NABU_OLD_LABEL=linux NABU_NEW_LABEL=userdata bash relabel-partition.sh
+```
+
+If the tablet's partition is already named `linux`, `flash.sh` detects that and
+skips the check.
 
 ### Step by step
 
-1. **Put the tablet in fastboot mode**: hold **Vol Down + Power** until the fastboot screen appears.
+1. **Rename the root partition** (once per device), from Android with root:
+   ```bash
+   bash relabel-partition.sh
+   ```
 
-2. **Run the installer**:
+2. **Put the tablet in fastboot mode**: hold **Vol Down + Power** until the fastboot screen appears.
+
+3. **Run the installer**:
    ```bash
    bash join-and-flash.sh
    ```
@@ -137,13 +180,14 @@ cd release/dist
    bash flash.sh
    ```
 
-3. The script will:
+4. The script will:
+   - Verify that the device actually has a `linux` partition (and stop with a pointer to the relabel step if not)
    - Erase `dtbo_b` and flash `vbmeta_disabled.img` to `vbmeta_b` (disables Android Verified Boot)
    - Flash `boot.img` to `boot_b` (CachyOS kernel + DTB)
    - Decompress `linux.img.zst`, optionally inject your local SSH public key, and flash the `linux` partition (~4 minutes)
    - Set active slot to B and reboot
 
-4. CachyOS boots in about 60 seconds.
+5. CachyOS boots in about 60 seconds.
 
 ### Optional automatic SSH setup
 
@@ -260,6 +304,10 @@ PBL (ROM) -> XBL -> ABL -> boot.img (CachyOS kernel + DTB, Android bootimg forma
 
 The boot.img is a direct-boot Android boot image (header v0) containing the CachyOS kernel with DTB appended. Kernel cmdline: `root=PARTLABEL=linux rw`. The rootfs lives on an ext4 partition (`PARTLABEL=linux`). No GRUB or UEFI involved in the actual boot.
 
+The `linux` partition is the stock Android `userdata` partition with its GPT
+entry renamed (see [Partition relabel](#partition-relabel-userdata--linux)) —
+the partition boundaries are unchanged, only the label in the partition table.
+
 ### Qualcomm userspace
 
 WiFi on nabu requires Qualcomm userspace that is not available in Arch repos:
@@ -326,7 +374,10 @@ nabu-cachyos/
 │   ├── create-release.sh       # Packages output/ into a release-ready dist/ directory
 │   ├── flash.sh                # Flashes an unsplit local image set via fastboot
 │   ├── inject-ssh-key.sh       # Optionally injects a local SSH public key into linux.img
-│   └── join-and-flash.sh       # Reassembles split rootfs parts, then runs flash.sh
+│   ├── join-and-flash.sh       # Reassembles split rootfs parts, then runs flash.sh
+│   └── relabel-partition.sh    # Renames the GPT partition userdata -> linux
+├── tools/
+│   └── gpt-relabel.py          # Patches the GPT partition name and both CRCs
 └── output/                     # Build artifacts (boot.img, linux.img.zst, checksums, kernel/, firmware/)
 ```
 

@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SSH_KEY_HELPER="${SCRIPT_DIR}/inject-ssh-key.sh"
+RELABEL_HELPER="${SCRIPT_DIR}/relabel-partition.sh"
 
 echo "=== CachyOS Nabu Flasher ==="
 echo ""
@@ -21,6 +22,36 @@ done
 echo "Checking device connection..."
 fastboot devices | grep -q . || { echo "ERROR: No device found. Boot tablet into fastboot (Vol Down + Power)."; exit 1; }
 echo "  Device found."
+echo ""
+
+# The kernel boots with `root=PARTLABEL=linux`, so the GPT has to name the
+# root partition "linux".  A stock Xiaomi table calls it "userdata" — that
+# rename is a GPT surgery and has to happen while the device is still in
+# Android, before fastboot is entered.  Detect it here instead of flashing a
+# 9 GB image into a partition the kernel cannot find.
+fastboot_has_partition() {
+    fastboot getvar all 2>/dev/null \
+        | grep -qE "^partition-(size|type):$1[[:space:]]"
+}
+
+if ! fastboot_has_partition linux; then
+    echo "ERROR: this device has no partition named 'linux'."
+    echo ""
+    echo "The nabu kernel boots with root=PARTLABEL=linux, but the stock"
+    echo "Xiaomi partition table names that partition 'userdata'. Rename it"
+    echo "first (from Android, with USB debugging and root enabled):"
+    echo ""
+    if [ -x "${RELABEL_HELPER}" ]; then
+        echo "    ${RELABEL_HELPER}"
+    else
+        echo "    ./relabel-partition.sh      # from a release bundle"
+        echo "    ./release/relabel-partition.sh   # from a git checkout"
+    fi
+    echo ""
+    echo "Then reboot into fastboot (Vol Down + Power) and run this script again."
+    exit 1
+fi
+echo "  Found 'linux' partition."
 echo ""
 
 if [ "${FORCE_FLASH:-0}" = "1" ]; then

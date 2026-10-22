@@ -23,7 +23,9 @@ for f in \
     "${VBMETA_SOURCE}" \
     "${SCRIPT_DIR}/flash.sh" \
     "${SCRIPT_DIR}/join-and-flash.sh" \
-    "${SCRIPT_DIR}/inject-ssh-key.sh"; do
+    "${SCRIPT_DIR}/inject-ssh-key.sh" \
+    "${SCRIPT_DIR}/relabel-partition.sh" \
+    "${REPO_DIR}/tools/gpt-relabel.py"; do
     [ -f "${f}" ] || { echo "ERROR: missing required file: ${f}"; exit 1; }
 done
 
@@ -37,7 +39,10 @@ cp "${VBMETA_SOURCE}" "${DIST_DIR}/vbmeta_disabled.img"
 cp "${SCRIPT_DIR}/flash.sh" "${DIST_DIR}/"
 cp "${SCRIPT_DIR}/join-and-flash.sh" "${DIST_DIR}/"
 cp "${SCRIPT_DIR}/inject-ssh-key.sh" "${DIST_DIR}/"
-chmod +x "${DIST_DIR}/flash.sh" "${DIST_DIR}/join-and-flash.sh" "${DIST_DIR}/inject-ssh-key.sh"
+cp "${SCRIPT_DIR}/relabel-partition.sh" "${DIST_DIR}/"
+cp "${REPO_DIR}/tools/gpt-relabel.py" "${DIST_DIR}/"
+chmod +x "${DIST_DIR}/flash.sh" "${DIST_DIR}/join-and-flash.sh" \
+    "${DIST_DIR}/inject-ssh-key.sh" "${DIST_DIR}/relabel-partition.sh"
 
 split -b "${PART_SIZE}" "${OUTPUT_DIR}/linux.img.zst" "${DIST_DIR}/linux.img.zst.part-"
 
@@ -46,9 +51,11 @@ split -b "${PART_SIZE}" "${OUTPUT_DIR}/linux.img.zst" "${DIST_DIR}/linux.img.zst
     "${SHA256_CMD[@]}" \
         boot.img \
         flash.sh \
+        gpt-relabel.py \
         inject-ssh-key.sh \
         join-and-flash.sh \
         linux.img.zst.part-* \
+        relabel-partition.sh \
         vbmeta_disabled.img \
         > SHA256SUMS
 )

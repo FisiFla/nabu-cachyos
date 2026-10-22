@@ -6,6 +6,8 @@ output/
 *.img.zst
 *.tar.gz
 output.old/
+__pycache__/
+*.pyc
 
 # AI assistant artifacts
 CLAUDE.md

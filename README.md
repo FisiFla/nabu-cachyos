@@ -97,9 +97,8 @@ SKIP_SSH_KEY_INJECTION=1 bash flash.sh     # skip it
 - Auto-login as `nabu` (no password, passwordless `sudo`)
 - Connect to WiFi in GNOME Settings — touch-friendly, no keyboard needed
 - `ssh nabu@nabu-cachyos.local` (key-only by default; see [SSH](#ssh))
-- The root filesystem grows to fill the `linux` partition on first boot
-  (`nabu-growroot.service`); a carve gives it 30 GiB, a relabel the whole old
-  `userdata`
+- `/` grows to fill the `linux` partition on first boot, so you end up with
+  30 GiB (carve) or the whole old `userdata` (relabel)
 
 ### Switching between the two systems (dual boot only)
 

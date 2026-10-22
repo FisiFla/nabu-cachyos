@@ -175,6 +175,44 @@ make -j"$(nproc)" "${MAKE_ARGS[@]}" Image.gz dtbs modules
 echo "Collecting build artifacts..."
 cp arch/arm64/boot/Image.gz "${OUTPUT_DIR}/"
 cp arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb "${OUTPUT_DIR}/"
+
+# NAS-218: prove the SLPI override survived into the compiled DTB. dtc only
+# WARNS when an override references a nonexistent label — the build would
+# succeed with SLPI silently disabled and every nabu sensor dead.
+SLPI_DTB="arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb"
+if command -v dtc >/dev/null 2>&1; then
+    SLPI_DTS_DUMP="$(mktemp)"
+    if dtc -I dtb -O dts -o "${SLPI_DTS_DUMP}" "${SLPI_DTB}" 2>/dev/null; then
+        # Find the SLPI pas node by its compatible; the override must have
+        # left it enabled and pointed at the firmware blob
+        # fetch-firmware.sh installs.
+        slpi_line=$(grep -n 'qcom,sm8150-slpi-pas' "${SLPI_DTS_DUMP}" | head -n 1 | cut -d: -f1)
+        slpi_ok=0
+        if [ -n "${slpi_line}" ]; then
+            slpi_block=$(sed -n "${slpi_line},$((slpi_line + 40))p" "${SLPI_DTS_DUMP}")
+            if grep -q 'status = "okay";' <<< "${slpi_block}" \
+                && grep -q 'qcom,firmware-name = "qcom/sm8150/xiaomi/nabu/slpi_nb.mbn";' <<< "${slpi_block}"; then
+                slpi_ok=1
+            fi
+        fi
+        if [ "${slpi_ok}" = "1" ]; then
+            echo "SLPI override verified in DTB: status=okay, firmware-name=slpi_nb.mbn"
+        else
+            echo "ERROR: SLPI remoteproc (qcom,sm8150-slpi-pas) is missing from the"
+            echo "       compiled DTB or not enabled with our firmware-name."
+            echo "       enable-slpi.sh's override probably referenced a renamed or"
+            echo "       removed label — check it against the upstream DTS."
+            rm -f "${SLPI_DTS_DUMP}"
+            exit 1
+        fi
+        rm -f "${SLPI_DTS_DUMP}"
+    else
+        echo "WARNING: could not decompile ${SLPI_DTB} — skipping the SLPI node"
+        echo "         verification."
+    fi
+else
+    echo "WARNING: dtc not found — skipping the SLPI node verification."
+fi
 make "${MAKE_ARGS[@]}" modules_install INSTALL_MOD_PATH="${OUTPUT_DIR}/modules"
 
 # modules_install leaves absolute "build" and "source" symlinks pointing at

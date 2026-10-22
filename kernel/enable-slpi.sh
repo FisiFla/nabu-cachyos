@@ -22,6 +22,17 @@ if [ ! -f "$DTS" ]; then
     exit 1
 fi
 
+# Fail fast if the label this override targets does not exist upstream.
+# dtc only WARNS about "reference to non-existent node" — the override is
+# silently dropped from the DTB and SLPI (all nabu sensors) never comes up.
+# The build-kernel.sh DTB check catches that too; failing here is cheaper.
+if ! grep -qrE '^[[:space:]]*remoteproc_slpi:' arch/arm64/boot/dts/qcom/; then
+    echo "ERROR: no 'remoteproc_slpi:' label in arch/arm64/boot/dts/qcom/ —"
+    echo "       the upstream tree renamed or removed it and this append"
+    echo "       would be a silent no-op."
+    exit 1
+fi
+
 if grep -q "remoteproc_slpi" "$DTS" && grep -q "slpi_nb.mbn" "$DTS"; then
     echo "SLPI already enabled in $DTS, skipping."
     exit 0

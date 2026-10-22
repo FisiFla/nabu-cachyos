@@ -64,7 +64,13 @@ echo "  Filesystem populated (/etc/os-release present, ${FREE_RATIO}% free)."
 # Record how big the 'linux' partition must be, so release/flash.sh can
 # compare it against `fastboot getvar partition-size:linux` before flashing
 # (fastboot cannot grow partitions — a mismatch has to abort up front).
-printf 'IMG_SIZE_MB=%s\n' "${IMG_SIZE_MB}" > "${OUTPUT}/image-size.txt"
+#
+# IMG_SIZE_MB is a CEILING (content + headroom), IMG_SIZE_BYTES is the exact
+# file size. flash.sh needs both: the ceiling to validate the partition, the
+# exact size to tell a stale linux.img from the one this bundle produced.
+IMG_SIZE_BYTES=$(wc -c < "${LINUX_IMG}")
+printf 'IMG_SIZE_MB=%s\nIMG_SIZE_BYTES=%s\n' "${IMG_SIZE_MB}" "${IMG_SIZE_BYTES}" \
+    > "${OUTPUT}/image-size.txt"
 
 # Compress with zstd
 echo "  Compressing rootfs image..."

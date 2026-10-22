@@ -1,81 +1,83 @@
+# Auto-rotation via Qualcomm Sensor Subsystem (NAS-218): iio-sensor-proxy reads
+# Found live during NAS-229 qbootctl install.
+# Pacman ALARM signing keyring. Without this, /usr/share/pacman/keyrings/archlinuxarm.gpg
+# firmware (no I2C, so the TrustZone GPIO reservation stays intact). Factory
+# is absent and first-boot `pacman -Sy <foo>` fails with "signature from … is unknown trust".
+# read-only at /persist by fstab.
+# sns.reg calibrations come from the device's own /persist partition, mounted
+# the LSM6DSO accelerometer via libssc → libqrtr-glib → kernel QRTR → ADSP SSC
+alacritty
+archlinuxarm-keyring
+avahi
 base
 base-devel
-# Pacman ALARM signing keyring. Without this, /usr/share/pacman/keyrings/archlinuxarm.gpg
-# is absent and first-boot `pacman -Sy <foo>` fails with "signature from … is unknown trust".
-# Found live during NAS-229 qbootctl install.
-archlinuxarm-keyring
-linux-firmware
-mkinitcpio
-networkmanager
 bluez
 bluez-utils
-sudo
-openssh
-btrfs-progs
-zram-generator
-iwd
-gettext
-wget
-curl
-git
-vim
-nano
-htop
 btop
+btrfs-progs
+capitaine-cursors
+curl
+eog
+evince
 fastfetch
+firefox
+fish
+fzf
+gdm
+gettext
+git
+gnome-calculator
+gnome-control-center
+gnome-disk-utility
+gnome-keyring
+gnome-shell
+gnome-system-monitor
+gnome-terminal
+gnome-text-editor
+gnome-tweaks
+htop
+iio-sensor-proxy
+iotop
+iwd
+libqmi
+libssc
+linux-firmware
+loupe
+lsof
 man-db
 man-pages
-zsh
-fish
-gnome-shell
-gdm
-gnome-control-center
-gnome-terminal
-gnome-tweaks
-gnome-keyring
+mkinitcpio
+nano
 nautilus
-gnome-text-editor
-gnome-calculator
-gnome-system-monitor
-gnome-disk-utility
-xdg-desktop-portal-gnome
-evince
-eog
-loupe
-pipewire
-pipewire-pulse
-pipewire-alsa
-wireplumber
-python
-python-gobject
-python-pip
+networkmanager
 nodejs
-npm
-rustup
-scx-scheds
-strace
-lsof
-iotop
-powertop
 noto-fonts
 noto-fonts-cjk
 noto-fonts-emoji
+npm
+nss-mdns
+openssh
+pipewire
+pipewire-alsa
+pipewire-pulse
+pkgfile
+plymouth
+powertop
+protobuf-c
+python
+python-gobject
+python-pip
+rustup
+scx-scheds
+strace
+sudo
 ttf-fantasque-nerd
 ttf-fira-sans
-plymouth
-capitaine-cursors
-firefox
-alacritty
-fzf
-pkgfile
-zsh-syntax-highlighting
+vim
+wget
+wireplumber
+xdg-desktop-portal-gnome
+zram-generator
+zsh
 zsh-autosuggestions
-avahi
-nss-mdns
-# Auto-rotation via Qualcomm Sensor Subsystem (NAS-218): iio-sensor-proxy reads
-# the LSM6DSO accelerometer via libssc → libqrtr-glib → kernel QRTR → ADSP SSC
-# firmware (no I2C, so the TrustZone GPIO reservation stays intact). Factory
-# sns.reg calibrations come from the device's own /persist partition, mounted
-# read-only at /persist by fstab.
-libssc
-iio-sensor-proxy
+zsh-syntax-highlighting

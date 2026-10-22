@@ -1,0 +1,274 @@
+From d3c8c5a79f11c9f3772417aa7683953fd85a1546 Mon Sep 17 00:00:00 2001
+From: Kumar <kumar@nabu>
+Date: Wed, 30 Sep 2026 11:24:36 +0530
+Subject: [PATCH] Fix SSC sensor discovery race, signal broadcasts, and daemon
+ restart loop
+
+---
+ src/iio-sensor-proxy.c | 138 ++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 115 insertions(+), 23 deletions(-)
+
+diff --git a/src/iio-sensor-proxy.c b/src/iio-sensor-proxy.c
+index 9c7e8cd..4db1438 100644
+--- a/src/iio-sensor-proxy.c
++++ b/src/iio-sensor-proxy.c
+@@ -65,6 +65,9 @@ typedef struct {
+ 
+ 	/* Proximity */
+ 	gboolean previous_prox_near;
++
++	gboolean initial_discovery_done;
++	guint retry_timer_id;
+ } SensorData;
+ 
+ static const SensorDriver * const drivers[] = {
+@@ -114,6 +117,10 @@ static void sensor_changes (GUdevClient *client,
+ 			    gchar       *action,
+ 			    GUdevDevice *device,
+ 			    SensorData  *data);
++static void maybe_notify_sensor_startup_finished (SensorData *data,
++						  DriverType  type);
++static void open_discovered_sensors (SensorData *data);
++static gboolean retry_sensor_discovery (gpointer user_data);
+ 
+ static gboolean
+ driver_type_exists (SensorData *data,
+@@ -240,8 +247,6 @@ send_dbus_event_for_client (SensorData     *data,
+ 	GVariantBuilder props_builder;
+ 	GVariant *props_changed = NULL;
+ 
+-	g_return_if_fail (destination_bus_name != NULL);
+-
+ 	g_variant_builder_init (&props_builder, G_VARIANT_TYPE ("a{sv}"));
+ 
+ 	if (mask & PROP_HAS_ACCELEROMETER) {
+@@ -377,16 +382,21 @@ static void
+ send_driver_changed_dbus_event (SensorData   *data,
+ 				DriverType    driver_type)
+ {
++	PropertiesMask mask = 0;
++
+ 	if (driver_type == DRIVER_TYPE_ACCEL)
+-		send_dbus_event (data, PROP_HAS_ACCELEROMETER);
++		mask = PROP_HAS_ACCELEROMETER;
+ 	else if (driver_type == DRIVER_TYPE_LIGHT)
+-		send_dbus_event (data, PROP_HAS_AMBIENT_LIGHT);
++		mask = PROP_HAS_AMBIENT_LIGHT;
+ 	else if (driver_type == DRIVER_TYPE_PROXIMITY)
+-		send_dbus_event (data, PROP_HAS_PROXIMITY);
++		mask = PROP_HAS_PROXIMITY;
+ 	else if (driver_type == DRIVER_TYPE_COMPASS)
+-		send_dbus_event (data, PROP_HAS_COMPASS);
++		mask = PROP_HAS_COMPASS;
+ 	else
+ 		g_assert_not_reached ();
++
++	send_dbus_event (data, mask);
++	send_dbus_event_for_client (data, NULL, mask);
+ }
+ 
+ static gboolean
+@@ -522,7 +532,7 @@ handle_generic_method_call (SensorData            *data,
+ 							   NULL);
+ 		g_hash_table_insert (ht, g_strdup (sender), GUINT_TO_POINTER (watch_id));
+ 
+-		if (driver_type_exists (data, driver_type)) {
++		if (DEVICE_FOR_TYPE(driver_type) != NULL) {
+ 			SensorDevice *sensor_device = DEVICE_FOR_TYPE(driver_type);
+ 
+ 			/* No other clients for this sensor? Start it */
+@@ -545,6 +555,10 @@ handle_generic_method_call (SensorData            *data,
+ 				 * invocation immediately. */
+ 				g_dbus_method_invocation_return_value (invocation, NULL);
+ 			}
++		} else if (!data->initial_discovery_done || DRIVER_FOR_TYPE(driver_type) != NULL) {
++			/* Sensor is still being discovered or opened; delay invocation until ready */
++			g_ptr_array_add (data->sensor_startup_dbus_invocations_delayed[driver_type],
++					 invocation);
+ 		} else {
+ 			g_dbus_method_invocation_return_value (invocation, NULL);
+ 		}
+@@ -742,32 +756,38 @@ bus_acquired_handler (GDBusConnection *connection,
+ 	/* Initialize DBus clients hash table before DBus is fully exposed */
+ 	data->client = g_udev_client_new (subsystems);
+ 
+-	for (guint i = 0; i < NUM_SENSOR_TYPES; i++)
++	for (guint i = 0; i < NUM_SENSOR_TYPES; i++) {
+ 		data->clients[i] = create_clients_hash_table ();
++		data->sensor_startup_dbus_invocations_delayed[i] = g_ptr_array_new ();
++	}
+ 
+ 	data->connection = g_object_ref (connection);
+ }
+ 
+ static void
+-name_acquired_handler (GDBusConnection *connection,
+-		       const gchar     *name,
+-		       gpointer         user_data)
++open_discovered_sensors (SensorData *data)
+ {
+-	SensorData *data = user_data;
+ 	guint i;
+ 
+-	if (!find_sensors (data->client, data))
+-		goto bail;
+-
+-	g_signal_connect (G_OBJECT (data->client), "uevent",
+-			  G_CALLBACK (sensor_changes), data);
+-
+ 	for (i = 0; i < NUM_SENSOR_TYPES; i++) {
+ 		SensorDevice *sensor_device;
++		GHashTable *ht;
+ 
+-		data->sensor_startup_dbus_invocations_delayed[i] = g_ptr_array_new ();
++		if (!driver_type_exists (data, i)) {
++			if (data->initial_discovery_done &&
++			    data->sensor_startup_dbus_invocations_delayed[i]->len > 0) {
++				g_autofree GDBusMethodInvocation **invocations = NULL;
++				size_t n_invocations, j;
++
++				invocations = (GDBusMethodInvocation**) g_ptr_array_steal (data->sensor_startup_dbus_invocations_delayed[i],
++											   &n_invocations);
++				for (j = 0; j < n_invocations; j++)
++					g_dbus_method_invocation_return_value (invocations[j], NULL);
++			}
++			continue;
++		}
+ 
+-		if (!driver_type_exists (data, i))
++		if (DEVICE_FOR_TYPE(i) != NULL)
+ 			continue;
+ 
+ 		sensor_device = driver_open (DRIVER_FOR_TYPE(i), UDEV_DEVICE_FOR_TYPE(i),
+@@ -779,19 +799,80 @@ name_acquired_handler (GDBusConnection *connection,
+ 		}
+ 
+ 		DEVICE_FOR_TYPE(i) = sensor_device;
++
++		ht = data->clients[i];
++		if (g_hash_table_size (ht) > 0) {
++			data->sensor_startup_dbus_event_delayed[i] = TRUE;
++			driver_set_polling (sensor_device, TRUE);
++		} else {
++			send_driver_changed_dbus_event (data, i);
++		}
++
++		maybe_notify_sensor_startup_finished (data, i);
+ 	}
++}
++
++static gboolean
++retry_sensor_discovery (gpointer user_data)
++{
++	SensorData *data = user_data;
+ 
++	if (driver_type_exists (data, DRIVER_TYPE_ACCEL)) {
++		data->retry_timer_id = 0;
++		return G_SOURCE_REMOVE;
++	}
++
++	g_debug ("Retrying sensor discovery...");
++	if (find_sensors (data->client, data)) {
++		open_discovered_sensors (data);
++	}
++
++	if (driver_type_exists (data, DRIVER_TYPE_ACCEL)) {
++		data->retry_timer_id = 0;
++		return G_SOURCE_REMOVE;
++	}
++
++	return G_SOURCE_CONTINUE;
++}
++
++static void
++name_acquired_handler (GDBusConnection *connection,
++		       const gchar     *name,
++		       gpointer         user_data)
++{
++	SensorData *data = user_data;
++
++	find_sensors (data->client, data);
++
++	g_signal_connect (G_OBJECT (data->client), "uevent",
++			  G_CALLBACK (sensor_changes), data);
++
++	open_discovered_sensors (data);
++
++	data->initial_discovery_done = TRUE;
++
++#ifdef HAS_LIBSSC
++	if (!driver_type_exists (data, DRIVER_TYPE_ACCEL) && data->retry_timer_id == 0) {
++		g_debug ("Accelerometer not yet available; scheduling retry timer");
++		data->retry_timer_id = g_timeout_add_seconds (1, retry_sensor_discovery, data);
++	}
++#else
+ 	if (!any_sensors_left (data))
+ 		goto bail;
++#endif
+ 
+ 	send_dbus_event (data, PROP_ALL);
+ 	send_dbus_event (data, PROP_ALL_COMPASS);
++	send_dbus_event_for_client (data, NULL, PROP_ALL);
++	send_dbus_event_for_client (data, NULL, PROP_ALL_COMPASS);
+ 	return;
+ 
++#ifndef HAS_LIBSSC
+ bail:
+ 	data->ret = 0;
+ 	g_message ("No sensors or missing kernel drivers for the sensors. Exiting");
+ 	g_main_loop_quit (data->loop);
++#endif
+ }
+ 
+ static gboolean
+@@ -1005,8 +1086,13 @@ free_sensor_data (SensorData *data)
+ 		data->name_id = 0;
+ 	}
+ 
++	if (data->retry_timer_id != 0) {
++		g_source_remove (data->retry_timer_id);
++		data->retry_timer_id = 0;
++	}
++
+ 	for (i = 0; i < NUM_SENSOR_TYPES; i++) {
+-		if (driver_type_exists (data, i))
++		if (driver_type_exists (data, i) && DEVICE_FOR_TYPE(i) != NULL)
+ 			driver_close (DEVICE_FOR_TYPE(i));
+ 		g_clear_object (&UDEV_DEVICE_FOR_TYPE(i));
+ 		g_clear_pointer (&data->clients[i], g_hash_table_unref);
+@@ -1045,8 +1131,10 @@ sensor_changes (GUdevClient *client,
+ 					 g_udev_device_get_sysfs_path (dev));
+ 
+ 				g_clear_object (&UDEV_DEVICE_FOR_TYPE(i));
+-				driver_close (DEVICE_FOR_TYPE(i));
+-				DEVICE_FOR_TYPE(i) = NULL;
++				if (DEVICE_FOR_TYPE(i) != NULL) {
++					driver_close (DEVICE_FOR_TYPE(i));
++					DEVICE_FOR_TYPE(i) = NULL;
++				}
+ 				DRIVER_FOR_TYPE(i) = NULL;
+ 
+ 				g_clear_pointer (&data->clients[i], g_hash_table_unref);
+@@ -1075,8 +1163,10 @@ sensor_changes (GUdevClient *client,
+ 			}
+ 		}
+ 
++#ifndef HAS_LIBSSC
+ 		if (!any_sensors_left (data))
+ 			g_main_loop_quit (data->loop);
++#endif
+ 	} else if (g_strcmp0 (action, "add") == 0) {
+ 		for (i = 0; i < G_N_ELEMENTS(drivers); i++) {
+ 			SensorDriver *driver = (SensorDriver *) drivers[i];
+@@ -1115,6 +1205,8 @@ sensor_changes (GUdevClient *client,
+ 					} else {
+ 						send_driver_changed_dbus_event (data, driver->type);
+ 					}
++
++					maybe_notify_sensor_startup_finished (data, driver->type);
+ 				}
+ 				break;
+ 			}
+-- 
+2.55.0
+

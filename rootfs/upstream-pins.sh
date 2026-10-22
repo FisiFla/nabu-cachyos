@@ -39,6 +39,19 @@ VIVALDI_MULTIARCH_BIN_COMMIT="22e1863fa6af955674db3ef958f93104db2862e9"
 # AUR: paru-bin
 PARU_BIN_COMMIT="92a55429afbec4fceeb2cef843245105307444d2"
 
+# iio-sensor-proxy + libssc (rootfs/build-iio-sensor-proxy.sh — issue #24).
+# Pinned at the commits the nabu patches were written against:
+#   iio-sensor-proxy tag 3.9 (annotated) → 0085ddf8ecb1…; patched by
+#   rootfs/patches/iio-sensor-proxy/{0001-fix-ssc-race-condition,
+#   0002-ssc-proximity-nabu-sar-fallback}.patch (source:
+#   github.com/Kumar-Jy/nabu-pkgs (HEAD fec1080 2026-10-21)/packages/iio-sensor-proxy @ master,
+#   fetched 2026-10-22).
+#   libssc tag v0.4.4 (annotated) → 0cf77b93b557…; patched by
+#   rootfs/patches/libssc/0001-report-handler-lifecycle-fixes.patch
+#   (source: nabu-pkgs/packages/libssc @ master).
+IIO_SENSOR_PROXY_COMMIT="0085ddf8ecb173a1c5fcf2344aa40e561125354f"
+LIBSSC_COMMIT="0cf77b93b55752da34dca2dcecc06fca8665184b"
+
 # clone_pinned <url> <dir> <commit>
 # Fetch exactly one depth-1 commit and check it out. Works for any commit
 # reachable from the remote (GitHub and the AUR both allow fetch-by-SHA),

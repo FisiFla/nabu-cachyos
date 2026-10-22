@@ -1,0 +1,360 @@
+From 2e76b3b559d10ad66658d76b8fd25bd1cec26258 Mon Sep 17 00:00:00 2001
+From: Kumar-Jy <20044626+Kumar-Jy@users.noreply.github.com>
+Date: Wed, 7 Oct 2026 05:50:35 +0530
+Subject: [PATCH] Add Xiaomi SAR proximity fallback for nabu
+
+nabu publishes proximity via the Xiaomi 'sar_algo_1' sensor datatype
+('sar_detector_1') instead of the SSC standard 'proximity' datatype, and
+the stock udev rules never tag the FastRPC device with 'ssc-proximity',
+so HasProximity is always false.  Tag fastrpc-* with 'ssc-proximity' and
+fall back to the sar_algo_1 sensor in the SSC proximity driver: decode
+its first float as a near/far state (1.0 = near).
+---
+ data/80-iio-sensor-proxy.rules |   4 +-
+ src/drv-ssc-proximity.c        | 266 +++++++++++++++++++++++++++++----
+ 2 files changed, 237 insertions(+), 33 deletions(-)
+
+diff --git a/data/80-iio-sensor-proxy.rules b/data/80-iio-sensor-proxy.rules
+index fa8a4b3..d07a66d 100644
+--- a/data/80-iio-sensor-proxy.rules
++++ b/data/80-iio-sensor-proxy.rules
+@@ -21,8 +21,8 @@ SUBSYSTEM=="input", ENV{ID_INPUT_ACCELEROMETER}=="1", ENV{IIO_SENSOR_PROXY_TYPE}
+ # Set the sensor type for all the types we recognise for SDSP/ADSP with libssc.
+ # Some devices expose the sensors via a separate SDSP while others re-use ADSP.
+ # These DSPs expose itself as /dev/fastrpc-* in the misc subsystem.
+-SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass"
+-SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass"
++SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass ssc-proximity"
++SUBSYSTEM=="misc", KERNEL=="fastrpc-sdsp*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-light ssc-compass ssc-proximity"
+ 
+ ENV{IIO_SENSOR_PROXY_TYPE}=="", GOTO="iio_sensor_proxy_end"
+ 
+diff --git a/src/drv-ssc-proximity.c b/src/drv-ssc-proximity.c
+index fbb4482..84eecd5 100644
+--- a/src/drv-ssc-proximity.c
++++ b/src/drv-ssc-proximity.c
+@@ -18,11 +18,45 @@
+ #include <libssc-sensor.h>
+ #include <libssc-sensor-proximity.h>
+ 
++/* SNS client message ID used for sensor measurement reports */
++#define SSC_MSG_REPORT_MEASUREMENT		1025
++
+ typedef struct DrvData {
+ 	SSCSensorProximity *sensor;
+ 	gulong measurement_id;
++
++	/*
++	 * Xiaomi SAR fallback: nabu does not publish the SSC standard
++	 * 'proximity' datatype, it publishes the 'sar_algo_1' algorithm
++	 * (sensor "sar_detector_1") instead.  Its measurement payload is
++	 * a byte blob: [0x0a <len> <float32...> 0x10 <accuracy>], where
++	 * the first float is 1.0 when near and 0.0 when far.
++	 */
++	SSCSensor *sar_sensor;
++	gulong sar_report_id;
++	SSCClient *sar_client;
++	gboolean sar_streaming;
++	guint64 sar_uid_high;
++	guint64 sar_uid_low;
++	gboolean sar_near;
+ } DrvData;
+ 
++static void
++emit_near (SensorDevice *sensor_device, gboolean near)
++{
++	ProximityReadings readings;
++
++	readings.is_near = near ? PROXIMITY_NEAR_TRUE : PROXIMITY_NEAR_FALSE;
++	sensor_device->callback_func (sensor_device, (gpointer) &readings, sensor_device->user_data);
++}
++
++static void
++sar_new_cb (GObject *source, GAsyncResult *result, gpointer user_data);
++static void
++sar_open_cb (GObject *source, GAsyncResult *result, gpointer user_data);
++static void
++sar_close_cb (GObject *source, GAsyncResult *result, gpointer user_data);
++
+ static gboolean
+ ssc_proximity_discover (GUdevDevice *device)
+ {
+@@ -34,8 +68,15 @@ ssc_proximity_discover (GUdevDevice *device)
+ 
+ 	/* Open and close SSC proximity sensor for discovering */
+ 	sensor = ssc_sensor_proximity_new_sync (NULL, NULL);
+-	if (!sensor)
+-		return FALSE;
++	if (!sensor) {
++		/*
++		 * nabu does not expose the standard 'proximity' datatype:
++		 * proximity is provided by the Xiaomi 'sar_algo_1' sensor,
++		 * whose presence is verified in open().
++		 */
++		g_debug ("No standard SSC proximity datatype, assuming Xiaomi SAR proximity");
++		return TRUE;
++	}
+ 
+ 	if (!ssc_sensor_proximity_close_sync (sensor, NULL, NULL)) {
+ 		g_clear_object (&sensor);
+@@ -52,10 +93,127 @@ static void
+ measurement_cb (SSCSensorProximity *sensor, gboolean near, gpointer user_data)
+ {
+ 	SensorDevice *sensor_device = user_data;
+-	ProximityReadings readings;
+ 
+-	readings.is_near = near ? PROXIMITY_NEAR_TRUE : PROXIMITY_NEAR_FALSE;
+-	sensor_device->callback_func (sensor_device, (gpointer) &readings, sensor_device->user_data);
++	emit_near (sensor_device, near);
++}
++
++static void
++sar_report_cb (SSCClient *client, guint32 msg_id, guint64 uid_high, guint64 uid_low,
++	       GArray *buf, gpointer user_data)
++{
++	SensorDevice *sensor_device = user_data;
++	DrvData *drv_data = (DrvData *) sensor_device->priv;
++	guint8 *data;
++	gfloat near_value;
++	gboolean near;
++
++	if (msg_id != SSC_MSG_REPORT_MEASUREMENT)
++		return;
++	if (uid_high != drv_data->sar_uid_high || uid_low != drv_data->sar_uid_low)
++		return;
++
++	if (!buf || buf->len < 16)
++		return;
++	data = (guint8 *) buf->data;
++	if (data[0] != 0x0a)
++		return;
++	if (data[1] < (guint8) sizeof (near_value) || 2 + data[1] > buf->len)
++		return;
++
++	memcpy (&near_value, data + 2, sizeof (near_value));
++	near = near_value >= 0.5f;
++
++	/* Only emit a measurement when the state actually changed */
++	if (near != drv_data->sar_near) {
++		drv_data->sar_near = near;
++		emit_near (sensor_device, near);
++	}
++}
++
++static gboolean
++sar_connect_report (DrvData *drv_data, SensorDevice *sensor_device)
++{
++	SSCClient *client = NULL;
++
++	if (drv_data->sar_report_id)
++		return TRUE;
++
++	g_object_get (drv_data->sar_sensor, SSC_SENSOR_CLIENT, &client, NULL);
++	if (!client) {
++		g_warning ("SSC SAR proximity sensor has no client");
++		return FALSE;
++	}
++
++	/* Take ownership of the client reference returned by g_object_get() */
++	drv_data->sar_client = g_object_ref (client);
++	g_object_unref (client);
++	drv_data->sar_report_id = g_signal_connect (drv_data->sar_client,
++						    "report",
++						    G_CALLBACK (sar_report_cb),
++						    sensor_device);
++	return TRUE;
++}
++
++static void
++sar_new_cb (GObject *source, GAsyncResult *result, gpointer user_data)
++{
++	SensorDevice *sensor_device = user_data;
++	DrvData *drv_data = (DrvData *) sensor_device->priv;
++	g_autoptr(GError) error = NULL;
++	SSCSensor *sensor;
++
++	sensor = ssc_sensor_new_finish (result, &error);
++	if (!sensor) {
++		g_warning ("Creating SSC SAR proximity sensor failed: %s", error ? error->message : "UNKNOWN");
++		return;
++	}
++
++	/* Polling was stopped while creating the sensor */
++	if (!drv_data->sar_streaming) {
++		g_object_unref (sensor);
++		return;
++	}
++
++	drv_data->sar_sensor = sensor;
++	g_object_get (sensor,
++		      SSC_SENSOR_UID_HIGH, &drv_data->sar_uid_high,
++		      SSC_SENSOR_UID_LOW, &drv_data->sar_uid_low,
++		      NULL);
++
++	/* Start listening for reports before opening the sensor so we don't
++	 * miss the first measurement */
++	if (!sar_connect_report (drv_data, sensor_device)) {
++		drv_data->sar_sensor = NULL;
++		drv_data->sar_streaming = FALSE;
++		g_object_unref (sensor);
++		return;
++	}
++
++	/* Open asynchronously */
++	ssc_sensor_open (sensor, NULL, sar_open_cb, NULL);
++}
++
++static void
++sar_open_cb (GObject *source, GAsyncResult *result, gpointer user_data)
++{
++	g_autoptr(GError) error = NULL;
++
++	if (!ssc_sensor_open_finish ((SSCSensor *) source, result, &error))
++		g_warning ("Opening SSC SAR proximity sensor failed: %s", error ? error->message : "UNKNOWN");
++	else {
++		g_object_set_data (source, "sar-open", GINT_TO_POINTER (TRUE));
++		g_debug ("SSC SAR proximity sensor opened");
++	}
++}
++
++static void
++sar_close_cb (GObject *source, GAsyncResult *result, gpointer user_data)
++{
++	g_autoptr(GError) error = NULL;
++
++	if (!ssc_sensor_close_finish ((SSCSensor *) source, result, &error))
++		g_warning ("Closing SSC SAR proximity sensor failed: %s", error ? error->message : "UNKNOWN");
++	g_object_set_data (source, "sar-open", GINT_TO_POINTER (FALSE));
+ }
+ 
+ static SensorDevice *
+@@ -69,12 +227,17 @@ ssc_proximity_open (GUdevDevice *device)
+ 	sensor_device->priv = g_new0 (DrvData, 1);
+ 	drv_data = (DrvData *) sensor_device->priv;
+ 	drv_data->sensor = ssc_sensor_proximity_new_sync (NULL, &error);
+-	if (!drv_data->sensor)
+-		g_warning ("Creating SSC proximity sensor failed: %s", error->message);
+-	else
+-		g_object_get (drv_data->sensor,
+-		              SSC_SENSOR_NAME, &sensor_device->name,
+-		              NULL);
++	if (!drv_data->sensor) {
++		g_clear_error (&error);
++		/* nabu: no standard 'proximity' datatype, use Xiaomi SAR fallback */
++		sensor_device->name = g_strdup ("sar_detector_1 (SSC)");
++		g_debug ("SSC proximity not provided, using Xiaomi SAR fallback");
++		return sensor_device;
++	}
++
++	g_object_get (drv_data->sensor,
++		      SSC_SENSOR_NAME, &sensor_device->name,
++		      NULL);
+ 
+ 	return sensor_device;
+ }
+@@ -84,28 +247,58 @@ ssc_proximity_set_polling (SensorDevice *sensor_device, gboolean state)
+ {
+ 	DrvData *drv_data = (DrvData *) sensor_device->priv;
+ 	g_autoptr(GError) error = NULL;
++
+ 	if (state) {
+-		if (drv_data->measurement_id)
+-			return;
+-		/* Start listening for measurements */
+-		drv_data->measurement_id = g_signal_connect (drv_data->sensor,
+-					                     "measurement",
+-							     G_CALLBACK (measurement_cb),
+-							     sensor_device);
+-
+-		/* Enable sensor */
+-		if (!ssc_sensor_proximity_open_sync (drv_data->sensor, NULL, &error)) {
+-			g_warning ("Opening SSC proximity sensor failed: %s", error ? error->message : "UNKNOWN");
+-			return;
++		if (drv_data->sensor) {
++			/* Standard SSC proximity sensor */
++			if (drv_data->measurement_id)
++				return;
++			/* Start listening for measurements */
++			drv_data->measurement_id = g_signal_connect (drv_data->sensor,
++								     "measurement",
++								     G_CALLBACK (measurement_cb),
++								     sensor_device);
++
++			/* Enable sensor */
++			if (!ssc_sensor_proximity_open_sync (drv_data->sensor, NULL, &error)) {
++				g_warning ("Opening SSC proximity sensor failed: %s", error ? error->message : "UNKNOWN");
++				return;
++			}
++		} else {
++			/* Xiaomi SAR fallback */
++			if (drv_data->sar_streaming)
++				return;
++			drv_data->sar_streaming = TRUE;
++			if (drv_data->sar_sensor) {
++				/* Sensor already created, reopen it */
++				if (sar_connect_report (drv_data, sensor_device))
++					ssc_sensor_open (drv_data->sar_sensor, NULL, sar_open_cb, NULL);
++			} else {
++				/* Create, connect and open asynchronously */
++				ssc_sensor_new ((gchar *) "sar_algo_1", NULL, sar_new_cb, sensor_device);
++			}
+ 		}
+ 	} else {
+-		if (!drv_data->measurement_id)
+-			return;
+-		/* Stop listening for measurements */
+-		g_clear_signal_handler (&drv_data->measurement_id, drv_data->sensor);
+-		/* Disable sensor */
+-		if (!ssc_sensor_proximity_close_sync (drv_data->sensor, NULL, &error))
+-			g_warning ("Closing SSC proximity sensor failed: %s", error->message);
++		if (drv_data->sensor) {
++			/* Standard SSC proximity sensor */
++			if (!drv_data->measurement_id)
++				return;
++			/* Stop listening for measurements */
++			g_clear_signal_handler (&drv_data->measurement_id, drv_data->sensor);
++			/* Disable sensor */
++			if (!ssc_sensor_proximity_close_sync (drv_data->sensor, NULL, &error))
++				g_warning ("Closing SSC proximity sensor failed: %s", error ? error->message : "UNKNOWN");
++		} else {
++			/* Xiaomi SAR fallback */
++			drv_data->sar_streaming = FALSE;
++			if (drv_data->sar_client) {
++				g_clear_signal_handler (&drv_data->sar_report_id, drv_data->sar_client);
++				g_clear_object (&drv_data->sar_client);
++				/* Disable asynchronously if the sensor is open */
++				if (g_object_get_data (G_OBJECT (drv_data->sar_sensor), "sar-open"))
++					ssc_sensor_close (drv_data->sar_sensor, NULL, sar_close_cb, NULL);
++			}
++		}
+ 	}
+ }
+ 
+@@ -114,6 +307,17 @@ ssc_proximity_close (SensorDevice *sensor_device)
+ {
+ 	DrvData *drv_data = (DrvData *) sensor_device->priv;
+ 
++	if (drv_data->sar_client) {
++		g_clear_signal_handler (&drv_data->sar_report_id, drv_data->sar_client);
++		g_clear_object (&drv_data->sar_client);
++	}
++	if (drv_data->sar_sensor) {
++		/* Disable asynchronously (callback never touches sensor_device) */
++		if (g_object_get_data (G_OBJECT (drv_data->sar_sensor), "sar-open"))
++			ssc_sensor_close (drv_data->sar_sensor, NULL, sar_close_cb, NULL);
++		g_object_unref (drv_data->sar_sensor);
++	}
++
+ 	g_clear_object (&drv_data->sensor);
+ 	g_clear_pointer (&sensor_device->priv, g_free);
+ 	g_free (sensor_device);
+@@ -127,4 +331,4 @@ SensorDriver ssc_proximity = {
+ 	.open = ssc_proximity_open,
+ 	.set_polling = ssc_proximity_set_polling,
+ 	.close = ssc_proximity_close,
+-};
++};
+\ No newline at end of file
+-- 
+2.56.0
+

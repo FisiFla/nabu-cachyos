@@ -495,7 +495,14 @@ ExecStart=
 ExecStart=/usr/bin/hexagonrpcd -f /dev/fastrpc-sdsp -d sdsp -S sensorspd -R ${NABU_HEXAGONFS}
 CONFEOF
 
-# iio-sensor-proxy comes from a package (already installed by pacstrap), so we
+# Build libssc + a patched iio-sensor-proxy (see build-iio-sensor-proxy.sh).
+# This REPLACES the stock ALARM binary: the base rootfs from pacstrap ships
+# upstream iio-sensor-proxy, but the Snapdragon SSC race handling and Xiaomi
+# sar proximity reporting only exist in the two nabu patches inside it.
+echo "Building libssc + patched iio-sensor-proxy..."
+bash "${SCRIPT_DIR}/build-iio-sensor-proxy.sh" "${ROOTFS}"
+
+# iio-sensor-proxy is now the patched build (same upstream version), so we
 # can enable it now. The drop-in below orders it AFTER hexagonrpcd-adsp-sensorspd
 # so libssc can find Sensor Manager on QRTR before iio-sensor-proxy probes —
 # without the drop-in iio-sensor-proxy races, finds no sensors, and exits.

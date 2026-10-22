@@ -695,6 +695,13 @@ arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-sdsp.service 2>/dev/null ||
 arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-suspend.service 2>/dev/null || true
 arch-chroot "${ROOTFS}" systemctl enable hexagonrpcd-resume.service 2>/dev/null || true
 
+# The image is built at content size (see image/build-image.sh), while the
+# partition it is flashed into is not: 30 GiB for a carve, the whole old
+# userdata for a relabel. Grow the ext4 filesystem on first boot, otherwise the
+# tablet warns about low disk space with tens of GiB unused behind the root.
+chmod 755 "${ROOTFS}/usr/local/bin/nabu-growroot"
+arch-chroot "${ROOTFS}" systemctl enable nabu-growroot.service 2>/dev/null || true
+
 # Create systemd services for Qualcomm daemons
 # NOTE: qrtr-ns is NOT needed — kernel 6.14 has in-kernel QRTR name service.
 # Userspace qrtr-ns fails with "bind control socket: Address already in use".

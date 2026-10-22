@@ -1,0 +1,16 @@
+[Unit]
+Description=Grow the root filesystem to fill its partition
+Documentation=https://github.com/FisiFla/nabu-cachyos
+# The image is built at content size, the partition is not (30 GiB after a
+# carve, the whole old userdata after a relabel), so the filesystem has to be
+# grown once the root is mounted.
+After=local-fs.target
+ConditionPathExists=/dev/disk/by-partlabel/linux
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nabu-growroot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

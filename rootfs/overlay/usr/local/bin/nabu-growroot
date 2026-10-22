@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Grow the root filesystem to fill its partition.
+#
+# image/build-image.sh sizes the ext4 image to the content plus headroom, not
+# to the partition it is flashed into (30 GiB for a carve, the whole old
+# userdata for a relabel). Without this the root filesystem stays ~9 GiB and
+# the user gets a "low on space" warning with 20 GiB sitting unused behind it.
+#
+# resize2fs grows an ext4 filesystem online, so this is safe to run on every
+# boot; when the filesystem already fills the partition it is a no-op.
+
+set -euo pipefail
+
+DEVICE="${1:-/dev/disk/by-partlabel/linux}"
+
+if [ ! -e "${DEVICE}" ]; then
+	echo "nabu-growroot: ${DEVICE} not found, nothing to do"
+	exit 0
+fi
+
+device_bytes=$(blockdev --getsize64 "${DEVICE}")
+block_size=$(dumpe2fs -h "${DEVICE}" 2>/dev/null | awk '/^Block size:/ {print $3}')
+block_count=$(dumpe2fs -h "${DEVICE}" 2>/dev/null | awk '/^Block count:/ {print $3}')
+
+if [ -z "${block_size}" ] || [ -z "${block_count}" ]; then
+	echo "nabu-growroot: could not read the filesystem geometry, skipping"
+	exit 0
+fi
+
+fs_bytes=$((block_count * block_size))
+if [ "${fs_bytes}" -ge "${device_bytes}" ]; then
+	echo "nabu-growroot: filesystem already fills ${DEVICE}"
+	exit 0
+fi
+
+echo "nabu-growroot: growing ${DEVICE}: $((fs_bytes / 1024 / 1024)) MiB -> $((device_bytes / 1024 / 1024)) MiB"
+resize2fs "${DEVICE}"

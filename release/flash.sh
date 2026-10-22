@@ -56,19 +56,70 @@ fastboot devices | grep -q . || { echo "ERROR: No device found. Boot tablet into
 echo "  Device found."
 echo ""
 
-# The kernel boots with `root=PARTLABEL=linux`, so the GPT has to name the
-# root partition "linux".  A stock Xiaomi table calls it "userdata" — that
-# rename is a GPT surgery and has to happen while the device is still in
-# Android, before fastboot is entered.  Detect it here instead of flashing a
-# 9 GB image into a partition the kernel cannot find.
-# "(bootloader) " prefix or a space after the colon are both common; anchor
-# nothing, match "partition-size:<name>:" / "partition-size: <name>:".
-fastboot_has_partition() {
-    fastboot getvar all 2>&1 \
-        | grep -qE "partition-(size|type): *$1 *:"
+# nabu's ABL firmware blocks forever on `fastboot getvar all`, and can wedge
+# the whole fastboot interface after repeated probes. Every getvar therefore
+# goes through a watchdog: run fastboot in the background, poll, kill -9 on
+# timeout. There is no `timeout` on macOS, so this is plain bash.
+# Prints whatever the bootloader said; returns fastboot's own status, or 124
+# when nothing came back within `secs`.
+fastboot_getvar_timed() {
+    local var="$1" secs="${2:-10}" out pid deadline rc
+    out=$(mktemp "${TMPDIR:-/tmp}/nabu-getvar.XXXXXX") || return 1
+    fastboot getvar "${var}" >"${out}" 2>&1 &
+    pid=$!
+    deadline=$(( $(date +%s) + secs ))
+    while kill -0 "${pid}" 2>/dev/null; do
+        if [ "$(date +%s)" -ge "${deadline}" ]; then
+            kill -9 "${pid}" 2>/dev/null || true
+            wait "${pid}" 2>/dev/null || true
+            cat "${out}"
+            rm -f "${out}"
+            return 124
+        fi
+        sleep 1
+    done
+    wait "${pid}"
+    rc=$?
+    cat "${out}"
+    rm -f "${out}"
+    return "${rc}"
 }
 
-if ! fastboot_has_partition linux; then
+# The kernel boots with `root=PARTLABEL=linux`, so the GPT has to name the
+# root partition "linux".  A stock Xiaomi table calls it "userdata" — that
+# rename is a GPT surgery and has to happen before fastboot is entered.
+# Detect it here instead of flashing a 9 GB image into a partition the
+# kernel cannot find.
+# Returns 0 = present, 1 = absent, 2 = the bootloader did not answer.
+# Targeted probes only: `getvar all` hangs on this firmware.
+fastboot_has_partition() {
+    local name="$1" var out rc
+    for var in "partition-size:${name}" "partition-type:${name}"; do
+        out=$(fastboot_getvar_timed "${var}" 10)
+        rc=$?
+        if [ "${rc}" -eq 124 ]; then
+            return 2
+        fi
+        case "${out}" in
+            *FAILED*|*"not found"*) continue ;;
+        esac
+        # "(bootloader) " prefix or a space after the colon are both common.
+        if printf '%s\n' "${out}" | grep -qE "partition-(size|type): *${name} *:"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+PART_CHECK=0
+fastboot_has_partition linux || PART_CHECK=$?
+if [ "${PART_CHECK}" -eq 2 ]; then
+    echo "WARNING: the bootloader did not answer 'fastboot getvar'."
+    echo "         Skipping the partition-table check — fastboot itself fails"
+    echo "         loudly if the 'linux' partition is missing. If the flash"
+    echo "         below names an unknown partition, reboot to fastboot and retry."
+    echo ""
+elif [ "${PART_CHECK}" -ne 0 ]; then
     echo "ERROR: this device has no partition named 'linux'."
     echo ""
     echo "The nabu kernel boots with root=PARTLABEL=linux, but the stock"
@@ -84,18 +135,23 @@ if ! fastboot_has_partition linux; then
     echo ""
     echo "Then reboot into fastboot (Vol Down + Power) and run this script again."
     exit 1
+else
+    echo "  Found 'linux' partition."
 fi
-echo "  Found 'linux' partition."
 echo ""
 
 # fastboot prints getvar results as "<name>: <value>" (sometimes behind a
 # "(bootloader) " prefix, and it may echo the name canonically with quoted
 # spaces). Match the name with optional spaces after each colon, and take
 # the value from the last colon-separated field of the matching line. An
-# unset/FAILED getvar becomes an empty string, not a set -e abort.
+# unset/FAILED/timed-out getvar becomes an empty string, not a set -e abort.
 fastboot_getvar() {
-    local name_pat="${1//:/[: ]*}"
-    fastboot getvar "$1" 2>&1 \
+    local name_pat="${1//:/[: ]*}" out
+    out=$(fastboot_getvar_timed "$1" 10)
+    case "${out}" in
+        '') return 0 ;;
+    esac
+    printf '%s\n' "${out}" \
         | grep -E "$name_pat" | tail -n 1 | awk -F': *' '{print $NF}'
     return 0
 }
@@ -170,6 +226,7 @@ fi
 
 if [ -f "${SCRIPT_DIR}/image-size.txt" ]; then
     REQUIRED_MB=$(sed -n 's/^IMG_SIZE_MB=//p' "${SCRIPT_DIR}/image-size.txt" | tail -n 1)
+    REQUIRED_BYTES=$(sed -n 's/^IMG_SIZE_BYTES=//p' "${SCRIPT_DIR}/image-size.txt" | tail -n 1)
     case "${REQUIRED_MB}" in
         ''|*[!0-9]*) : ;;
         *)
@@ -178,8 +235,26 @@ if [ -f "${SCRIPT_DIR}/image-size.txt" ]; then
             elif stat -c %s "${SCRIPT_DIR}/linux.img" >/dev/null 2>&1; then
                 IMG_BYTES=$(stat -c %s "${SCRIPT_DIR}/linux.img")
             fi
-            if [ "${IMG_BYTES:-0}" -ne "$(( REQUIRED_MB * 1024 * 1024 ))" ]; then
-                echo "  linux.img is $(( IMG_BYTES / 1024 / 1024 ))MB but image-size.txt declares ${REQUIRED_MB}MB — stale image from another build. Re-decompressing."
+            # IMG_SIZE_BYTES is exact, so any mismatch means a stale image.
+            # Older bundles only ship IMG_SIZE_MB, which is a ceiling (content
+            # + headroom) — only a *smaller* file can be stale there, and an
+            # equality test would re-decompress on every run and throw away
+            # injected SSH keys.
+            STALE=0
+            case "${REQUIRED_BYTES}" in
+                ''|*[!0-9]*)
+                    if [ "${IMG_BYTES:-0}" -lt "$(( REQUIRED_MB * 1024 * 1024 ))" ]; then
+                        STALE=1
+                    fi
+                    ;;
+                *)
+                    if [ "${IMG_BYTES:-0}" -ne "${REQUIRED_BYTES}" ]; then
+                        STALE=1
+                    fi
+                    ;;
+            esac
+            if [ "${STALE}" = "1" ]; then
+                echo "  linux.img is $(( IMG_BYTES / 1024 / 1024 ))MB but this bundle declares ${REQUIRED_MB}MB${REQUIRED_BYTES:+ (${REQUIRED_BYTES} bytes)} — stale image from another build. Re-decompressing."
                 rm -f "${SCRIPT_DIR}/linux.img"
                 command -v zstd >/dev/null || { echo "ERROR: zstd not found. Install: brew install zstd"; exit 1; }
                 zstd -d -f "${SCRIPT_DIR}/linux.img.zst" -o "${SCRIPT_DIR}/linux.img"

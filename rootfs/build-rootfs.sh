@@ -428,6 +428,15 @@ SYSUSEOF
 # Without this udev rule the FastRPC device nodes ship as `crw------- root:root`
 # and hexagonrpcd's `User=fastrpc` cannot open them — daemon exits status 4
 # (NOPERMISSION) on every restart. Grant the fastrpc group read+write.
+#
+# The fastrpc user AND group must already exist in the SHIPPED image. The
+# sysusers.d snippet below creates them only at first boot; if the group is
+# not in /etc/group when the udev rule fires, the rule silently no-ops (the
+# node stays root:root) and hexagonrpcd dies with status 4 forever. Create
+# them at build time; the snippet stays as first-boot insurance.
+arch-chroot "${ROOTFS}" groupadd -r fastrpc 2>/dev/null || true
+arch-chroot "${ROOTFS}" useradd -r -g fastrpc -s /usr/bin/nologin \
+    -c "Hexagon FastRPC bridge" fastrpc 2>/dev/null || true
 mkdir -p "${ROOTFS}/etc/udev/rules.d"
 cat > "${ROOTFS}/etc/udev/rules.d/91-fastrpc.rules" << 'UDEVEOF'
 KERNEL=="fastrpc-*", GROUP="fastrpc", MODE="0660"
@@ -469,11 +478,18 @@ CONFEOF
 # can enable it now. The drop-in below orders it AFTER hexagonrpcd-adsp-sensorspd
 # so libssc can find Sensor Manager on QRTR before iio-sensor-proxy probes —
 # without the drop-in iio-sensor-proxy races, finds no sensors, and exits.
+#
+# Wants=/After= alone only order the start; they do not require the daemon to
+# have succeeded. ExecStartPre=/usr/local/bin/wait-for-slpi-sensors therefore
+# polls the FastRPC device + the active sensorspd unit first (see the script).
 mkdir -p "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d"
 cat > "${ROOTFS}/etc/systemd/system/iio-sensor-proxy.service.d/wait-for-slpi.conf" << 'IIOEOF'
 [Unit]
 After=hexagonrpcd-adsp-sensorspd.service
 Wants=hexagonrpcd-adsp-sensorspd.service
+
+[Service]
+ExecStartPre=/usr/local/bin/wait-for-slpi-sensors
 IIOEOF
 
 arch-chroot "${ROOTFS}" systemctl enable iio-sensor-proxy.service 2>/dev/null || true

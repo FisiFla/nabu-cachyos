@@ -1,0 +1,38 @@
+#!/usr/bin/bash
+# Wait until the SLPI sensor stack is up before iio-sensor-proxy starts.
+#
+# Wants=/After= on hexagonrpcd-adsp-sensorspd only order the start — they do
+# not guarantee the daemon ever succeeded. If sensorspd fails early,
+# iio-sensor-proxy still races in, finds no Sensor Manager service on QRTR,
+# and the sensor stack stays dead until the next reboot. This ExecStartPre
+# helper polls for the FastRPC device and the active sensorspd daemon.
+#
+# Best-effort: when the timeout expires the caller still starts, so a broken
+# stack degrades the same way it always did instead of blocking boot.
+set -u
+
+TIMEOUT="${SLPI_WAIT_TIMEOUT:-60}"
+DEVICE=/dev/fastrpc-adsp
+UNIT=hexagonrpcd-adsp-sensorspd.service
+
+elapsed=0
+while [ "${elapsed}" -lt "${TIMEOUT}" ]; do
+    device_ok=0
+    unit_ok=0
+    if [ -e "${DEVICE}" ]; then
+        device_ok=1
+    fi
+    if systemctl is-active --quiet "${UNIT}" 2>/dev/null; then
+        unit_ok=1
+    fi
+    if [ "${device_ok}" -eq 1 ] && [ "${unit_ok}" -eq 1 ]; then
+        echo "SLPI sensor stack ready after ${elapsed}s."
+        exit 0
+    fi
+    sleep 1
+    elapsed=$((elapsed + 1))
+done
+
+echo "WARNING: SLPI sensor stack not ready after ${TIMEOUT}s" \
+     "(device=${device_ok}, unit=${unit_ok}) — starting iio-sensor-proxy anyway." >&2
+exit 0

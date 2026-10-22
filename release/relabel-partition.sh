@@ -132,7 +132,9 @@ read_blockdev() {
 
 SECTOR_SIZE="$(read_blockdev --getss)"
 SIZE_512="$(read_blockdev --getsz)"
-[ -n "${SECTOR_SIZE}" ] && [ -n "${SIZE_512}" ] || die "could not read the device geometry (blockdev)"
+if [ -z "${SECTOR_SIZE}" ] || [ -z "${SIZE_512}" ]; then
+    die "could not read the device geometry (blockdev)"
+fi
 
 if [ "${SECTOR_SIZE}" -lt 512 ] || [ $((SIZE_512 % (SECTOR_SIZE / 512))) -ne 0 ]; then
     die "unexpected geometry: sector size ${SECTOR_SIZE}, size ${SIZE_512} (512-byte blocks)"

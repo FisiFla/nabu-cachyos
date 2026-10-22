@@ -131,7 +131,7 @@ fi
 
 GNUPGHOME="$(mktemp -d "${TMPDIR:-/tmp}/alarm-gnupg.XXXXXX")"
 chmod 700 "${GNUPGHOME}"
-# shellcheck disable=SC2329  # invoked through the EXIT trap below
+# shellcheck disable=SC2329,SC2317  # invoked through the EXIT trap below
 cleanup() { rm -rf "${GNUPGHOME}"; }
 trap cleanup EXIT
 

@@ -141,7 +141,8 @@ if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
     # entire sensor stack stays dead (the I2C path is TrustZone-blocked, see
     # add-sensors.sh). The 7.3 tree reworked that path, so it is optional there.
     # shellcheck disable=SC2206  # deliberate word splitting of a space-separated list
-    CRITICAL_PATCHES=(${KERNEL_CRITICAL_PATCHES:-0001-bore 0005-fastrpc-fix-init-create-static-pageslen})
+    # Note: ${VAR-default} (no colon) so an explicit empty value means "no critical patches".
+    CRITICAL_PATCHES=(${KERNEL_CRITICAL_PATCHES-0001-bore 0005-fastrpc-fix-init-create-static-pageslen})
     echo "Applying patches..."
     unshallowed=0
     for patch in "${SCRIPT_DIR}"/patches/*.patch; do

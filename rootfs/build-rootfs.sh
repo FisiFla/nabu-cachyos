@@ -72,6 +72,17 @@ else
     pacstrap -C "${SCRIPT_DIR}/pacman-alarm.conf" -K "${ROOTFS}" "${packages[@]}"
     # Disable Landlock sandbox in rootfs pacman (fails inside Docker)
     sed -i '/^\[options\]/a DisableSandbox' "${ROOTFS}/etc/pacman.conf"
+    # [nabu-cachyos] project repo snippet, shipped commented until the
+    # signed repo + keyring are live (see packaging/README.md).
+    cat >> "${ROOTFS}/etc/pacman.conf" <<'EOF'
+
+# Signed project repo for kernel + nabu packages. Not enabled until the
+# maintainer publishes a keyring and hosted repo; kernel updates would
+# otherwise flow through it. See docs/cachyos-parity.md.
+#[nabu-cachyos]
+#SigLevel = Required DatabaseOptional
+#Server = https://fisifla.github.io/nabu-cachyos/stable/$arch
+EOF
     # Cache for next run
     echo "Caching pacstrap rootfs for future builds..."
     mkdir -p "$(dirname "${PACSTRAP_CACHE}")"
@@ -289,7 +300,7 @@ if [ ! -d "CachyOS-PKGBUILDS" ]; then
         git -C CachyOS-PKGBUILDS checkout --quiet FETCH_HEAD"
 fi
 
-for tool in cachyos-settings cachyos-alacritty-config cachyos-zsh-config cachyos-packageinstaller; do
+for tool in cachyos-settings cachyos-ananicy-rules cachy-update cachyos-alacritty-config cachyos-zsh-config cachyos-packageinstaller; do
     echo "  Building ${tool}..."
     # set -e: a renamed upstream directory would abort the WHOLE build here.
     cd "${TOOLS_BUILD}/CachyOS-PKGBUILDS/${tool}" || {
@@ -319,6 +330,29 @@ rm -rf "${ROOTFS}/usr/share/zsh-theme-powerlevel10k/.git" 2>/dev/null || true
 clone_pinned https://github.com/zsh-users/zsh-history-substring-search.git "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search" "${HISTORY_SUBSTRING_COMMIT}"
 rm -rf "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search/.git" 2>/dev/null || true
 rm -rf "${ROOTFS}/usr/share/zsh/plugins/zsh-history-substring-search/.git" 2>/dev/null || true
+
+# 8d. Selected nabu-pkgs imports (packaging/): WLAN MAC stabiliser + torch
+# app. nabu-pmac's service is intentionally NOT enabled here (changing the
+# WLAN MAC is user-visible and its DMI serial path is unverified on this DT
+# tablet) — users opt in with `systemctl enable nabu-pmac.service`.
+echo "Building imported nabu packages..."
+LOCAL_PKGS_BUILD="/tmp/nabu-local-pkgs"
+mkdir -p "${LOCAL_PKGS_BUILD}"
+for local_pkg in nabu-pmac nabu-torch; do
+    src_pkg="${SCRIPT_DIR}/../packaging/${local_pkg}"
+    [ -f "${src_pkg}/PKGBUILD" ] || { echo "  WARNING: ${src_pkg} missing, skipping"; continue; }
+    rm -rf "${LOCAL_PKGS_BUILD:?}/${local_pkg}"
+    cp -r "${src_pkg}" "${LOCAL_PKGS_BUILD}/${local_pkg}"
+    chown -R builder:builder "${LOCAL_PKGS_BUILD}/${local_pkg}"
+    if ! sudo -u builder bash -c "cd '${LOCAL_PKGS_BUILD}/${local_pkg}' && makepkg -f --noconfirm --nodeps" 2>&1; then
+        echo "  WARNING: ${local_pkg} failed to build, skipping"
+        continue
+    fi
+    while IFS= read -r built_pkg; do
+        pacman -U --noconfirm --nodeps --nodeps --root "${ROOTFS}" --dbpath "${ROOTFS}/var/lib/pacman" \
+            "${built_pkg}" && echo "  Installed ${built_pkg}"
+    done < <(find "${LOCAL_PKGS_BUILD}/${local_pkg}" -maxdepth 1 -name '*.pkg.tar*')
+done
 
 # .zshrc and .p10k.zsh come from rootfs/overlay/home/nabu/ (copied at line 92).
 # That overlay is the single source of truth — do not re-write them here.
@@ -442,8 +476,15 @@ arch-chroot "${ROOTFS}" systemctl enable qbootctl-mark-success.service 2>/dev/nu
 # USB serial gadget: a debug console over USB-C. OFF by default — the unit
 # carries a ConditionPathExists on /etc/nabu/serial-gadget.enabled, which
 # only the `nabu-serial-gadget enable` helper creates. Do not enable it here.
-# ananicy-cpp ships inside cachyos-settings; enable best-effort in case that install ever skips
+# CachyOS process-priority rules: the daemon is the ALARM ananicy-cpp package
+# (packages.txt), its rules are the cachyos-ananicy-rules built in step 8b.
+# Neither came via cachyos-settings: that package only *depends* on them and
+# the tools loop installs --nodeps, so both used to be silently absent.
 arch-chroot "${ROOTFS}" systemctl enable ananicy-cpp.service 2>/dev/null || true
+# iw regulatory domain (cachyos-settings ships the .path/.service pair;
+# preset-all does not reliably enable .path units, and iw/wireless-regdb are
+# now first-class packages instead of dangling --nodeps deps).
+arch-chroot "${ROOTFS}" systemctl enable cachyos-iw-set-regdomain.path 2>/dev/null || true
 # Auto-rotation full sensor stack (NAS-218).
 # Chain (boot order):
 #   1. local-fs.target mounts /mnt/vendor/persist (factory sns.reg calibrations)

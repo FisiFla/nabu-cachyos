@@ -1,43 +1,34 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/bash
+# kernel-update — print the current kernel update paths for this image.
+#
+# This used to tell users to rebuild a 6.17 sm8150-mainline tree on-device.
+# That tree and the KERNEL_VERSION knob are gone; the shipped kernel is
+# Kumar-Jy/linux nabu/7.3.y with the patch set in kernel/patches/.
 
-echo "=== nabu-cachyos kernel update guidance ==="
-echo
-echo "Currently running kernel: $(uname -r)"
-echo
-echo "There is no on-device kernel-update path on this system."
-echo
-echo "Boot is direct-boot Android bootimg: the kernel and DTB are baked"
-echo "into boot.img and flashed to the boot_b partition. /boot/efi/ is a"
-echo "plain directory on the ext4 root, NOT a mounted ESP, and there is"
-echo "no GRUB at runtime. Writing files into /boot/efi/ will NOT change"
-echo "the running kernel."
-echo
-echo "To actually update the kernel, do this from the build host (the"
-echo "MacBook with the nabu-cachyos repo checked out):"
-echo
-echo "  1. Build a new boot.img with the desired kernel branch:"
-echo "       KERNEL_VERSION=6.17-wifi-fix ./build.sh"
-echo "     KERNEL_VERSION is the sm8150-mainline BRANCH TAG (the build"
-echo "     clones 'sm8150/<KERNEL_VERSION>'), not a version number — the"
-echo "     release string is derived from the branch by the kernel build"
-echo "     and ends up in output/kernel/kernel-release."
-echo "     (or edit the default KERNEL_VERSION in build.sh)"
-echo
-echo "  2. Package the release artifacts:"
-echo "       VBMETA_SOURCE=/path/to/vbmeta_disabled.img \\"
-echo "         bash release/create-release.sh"
-echo
-echo "  3. Put the tablet into fastboot (Vol Down + Power), connect via"
-echo "     USB-C, then flash:"
-echo "       bash release/dist/join-and-flash.sh"
-echo
-echo "If the new kernel doesn't boot, slot A (Android) is preserved as a"
-echo "fallback — hold Vol Down + Power to enter fastboot, then run"
-echo "'fastboot set_active a' to return to Android."
-echo
-echo "Build currently defaults to sm8150/6.17-wifi-fix (boots reliably on"
-echo "nabu and applies BORE/BBR3 cleanly). 6.14.x is the previous known-"
-echo "good. Other untested sm8150-mainline branches may not boot."
-echo
-exit 0
+cat <<'EOF'
+Kernel updates on nabu-cachyos
+==============================
+
+1) Packaged kernel (once the [nabu-cachyos] repo is enabled, see
+   packaging/README.md in the source repo):
+
+     sudo pacman -Syu linux-nabu-cachyos
+     nabu-kernel-flash stage            # rebuild + verify, writes nothing
+     sudo nabu-kernel-flash flash --yes # back up boot_b, flash, verify
+
+   The pacman hook only stages /boot/nabu-boot.img; flashing stays a
+   separate, explicit step.
+
+2) Host rebuild + fastboot (works today, no repo needed), on your build
+   machine inside the nabu-cachyos checkout:
+
+     bash kernel/build-kernel.sh        # or a full ./build.sh run
+     # modules: copy output/kernel/modules/lib/modules/<release>/ into
+     # /usr/lib/modules/ on the tablet (rsync/ssh), then from fastboot:
+     fastboot flash boot_b output/boot.img
+     fastboot reboot
+
+There is NO supported on-device from-source kernel rebuild: the tablet
+has no cross toolchain in the image, and a native build is exactly the
+out-of-memory-prone path the host build exists to avoid.
+EOF

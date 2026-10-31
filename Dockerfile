@@ -15,7 +15,9 @@ RUN pacman -Syu --noconfirm && \
     base-devel bc bison flex dtc grub dosfstools btrfs-progs \
     mtools arch-install-scripts mkinitcpio git wget zstd parted \
     cpio android-tools python python-mako \
-    meson ninja systemd-libs ccache
+    meson ninja systemd-libs ccache \
+    cargo scdoc bats \
+    cmake clang llvm lld qt6-base qt6-tools polkit-qt6
 
 # Create non-root user for makepkg
 RUN useradd -m builder && \

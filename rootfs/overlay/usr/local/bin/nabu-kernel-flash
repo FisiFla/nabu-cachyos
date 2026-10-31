@@ -1,0 +1,181 @@
+#!/bin/bash
+# nabu-kernel-flash — rebuild the Android boot image on-device and,
+# only when explicitly asked, write it to the Linux boot slot (boot_b).
+#
+#   nabu-kernel-flash stage          # build + verify only, writes NOTHING
+#                                    # to the boot partition (default)
+#   sudo nabu-kernel-flash flash --yes
+#                                    # stage, back up current boot_b to
+#                                    # /boot/, dd the new image, read it
+#                                    # back and compare hashes
+#
+# UNTESTED ON HARDWARE: this helper ships ahead of the packaged kernel
+# (packaging/linux-nabu-cachyos). Until the maintainer has flashed a real
+# tablet with it, treat `flash` as experimental; `stage` is always safe.
+# The ALPM hook in nabu-boot-tools only ever calls `stage`.
+#
+# Inputs (installed by the linux-nabu-cachyos package):
+#   /boot/efi/Image.gz, /boot/efi/sm8150-xiaomi-nabu.dtb,
+#   cmdline from /etc/nabu/boot.cmdline.
+# Like kernel/build-kernel.sh, the boot image carries NO ramdisk: ext4 and
+# GPT support are built into the kernel, so it boots PARTLABEL=linux
+# directly. Do not add one without retesting the whole boot path.
+#
+# Environment:
+#   NABU_BOOT_EFI_DIR    artifact directory (default /boot/efi)
+#   NABU_BOOT_IMG_OUT    staged image path (default /boot/nabu-boot.img)
+#   NABU_BOOT_PARTITION  boot partition override (tests / odd layouts)
+#   NABU_BOOT_CMDLINE    cmdline override (default: file, else built-in)
+
+set -euo pipefail
+
+MODE="${1:-stage}"
+YES=0
+[ "${2:-}" = "--yes" ] && YES=1
+
+EFI_DIR="${NABU_BOOT_EFI_DIR:-/boot/efi}"
+OUT="${NABU_BOOT_IMG_OUT:-/boot/nabu-boot.img}"
+AUTOFLASH_GATE="/etc/nabu/kernel-autoflash.enabled"
+
+log() { printf 'nabu-kernel-flash: %s\n' "$*"; }
+die() { printf 'nabu-kernel-flash: ERROR: %s\n' "$*" >&2; exit 1; }
+
+file_size() { wc -c < "$1" | tr -d '[:space:]'; }
+
+resolve_partition() {
+    if [ -n "${NABU_BOOT_PARTITION:-}" ]; then
+        printf '%s' "${NABU_BOOT_PARTITION}"
+        return 0
+    fi
+    local link=""
+    for link in /dev/disk/by-partlabel/boot_b /dev/block/by-name/boot_b; do
+        if [ -e "${link}" ]; then
+            readlink -f "${link}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+partition_size() {
+    local part="$1" sectors=""
+    if command -v blockdev >/dev/null 2>&1; then
+        blockdev --getsize64 "${part}" 2>/dev/null && return 0
+    fi
+    if [ -f "${part}" ] && [ ! -b "${part}" ]; then
+        file_size "${part}"
+        return 0
+    fi
+    sectors="$(cat "/sys/class/block/$(basename "${part}")/size" 2>/dev/null || true)"
+    [ -n "${sectors}" ] || return 1
+    echo $((sectors * 512))
+}
+
+stage() {
+    command -v mkbootimg >/dev/null 2>&1 \
+        || die "mkbootimg not found (install android-tools)"
+    local img="${EFI_DIR}/Image.gz"
+    local dtb="${EFI_DIR}/sm8150-xiaomi-nabu.dtb"
+    [ -f "${img}" ] || die "missing ${img} (is linux-nabu-cachyos installed?)"
+    [ -f "${dtb}" ] || die "missing ${dtb}"
+    [ -s "${img}" ] && [ -s "${dtb}" ] \
+        || die "an artifact in ${EFI_DIR} is empty"
+
+    local cmdline="${NABU_BOOT_CMDLINE:-}"
+    if [ -z "${cmdline}" ] && [ -f /etc/nabu/boot.cmdline ]; then
+        cmdline="$(tr -d '\n' < /etc/nabu/boot.cmdline)"
+    fi
+    [ -n "${cmdline}" ] || cmdline="root=PARTLABEL=linux rw"
+    case "${cmdline}" in
+        *PARTLABEL=linux*) ;;
+        *) die "cmdline does not contain root=PARTLABEL=linux: ${cmdline}" ;;
+    esac
+
+    local tmpdir staged
+    tmpdir="$(mktemp -d)"
+    staged="${OUT}.tmp.$$"
+    # shellcheck disable=SC2329  # invoked via trap
+    cleanup_stage() { rm -rf "${tmpdir}"; rm -f "${staged}"; }
+    trap cleanup_stage EXIT
+    cat "${img}" "${dtb}" > "${tmpdir}/Image.gz-dtb"
+    # mkbootimg arguments must match kernel/build-kernel.sh exactly.
+    mkbootimg \
+        --kernel "${tmpdir}/Image.gz-dtb" \
+        --base 0x0 \
+        --kernel_offset 0x8000 \
+        --tags_offset 0x100 \
+        --pagesize 4096 \
+        --header_version 0 \
+        --cmdline "${cmdline}" \
+        -o "${staged}"
+    [ -s "${staged}" ] || die "mkbootimg produced an empty image"
+    mv "${staged}" "${OUT}"
+    trap - EXIT
+    rm -rf "${tmpdir}"
+    log "staged ${OUT} ($(file_size "${OUT}") bytes)"
+    command -v sha256sum >/dev/null 2>&1 && sha256sum "${OUT}" || true
+
+    local part="" psize=""
+    if part="$(resolve_partition)"; then
+        if psize="$(partition_size "${part}")"; then
+            [ "$(file_size "${OUT}")" -le "${psize}" ] \
+                || die "staged image ($(file_size "${OUT}")) exceeds ${part} (${psize})"
+            log "size OK: image fits ${part} (${psize} bytes)"
+        else
+            log "WARNING: could not read size of ${part}; size check skipped"
+        fi
+    else
+        log "WARNING: boot_b partition not found; size check skipped"
+    fi
+}
+
+flash() {
+    if [ "$(id -u)" -ne 0 ] && [ "${NABU_ALLOW_NONROOT_FLASH:-0}" != "1" ]; then
+        die "flash needs root (sudo)"
+    fi
+    if [ "${YES}" -ne 1 ] && [ ! -f "${AUTOFLASH_GATE}" ]; then
+        die "refusing to write the boot partition without --yes (or create ${AUTOFLASH_GATE} for unattended use)"
+    fi
+    stage
+
+    local part psize
+    part="$(resolve_partition)" || die "boot_b partition not found"
+    psize="$(partition_size "${part}")" || die "cannot read size of ${part}"
+    [ "$(file_size "${OUT}")" -le "${psize}" ] \
+        || die "staged image exceeds ${part}; not flashing"
+
+    local backup
+    backup="${NABU_BOOT_BACKUP_DIR:-/boot}/boot_b-backup-$(date +%Y%m%d-%H%M%S).img"
+    log "backing up current ${part} to ${backup}"
+    dd if="${part}" of="${backup}" bs=1048576 status=none \
+        || die "backup failed; not flashing"
+    [ -s "${backup}" ] || die "backup is empty; not flashing"
+
+    log "flashing ${OUT} to ${part}"
+    dd if="${OUT}" of="${part}" bs=1048576 conv=fsync status=none \
+        || die "dd to ${part} failed (backup kept at ${backup})"
+    sync
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        local want got
+        want="$(sha256sum "${OUT}" | awk '{print $1}')"
+        got="$(dd if="${part}" bs=4096 count=$(( ($(file_size "${OUT}") + 4095) / 4096 )) status=none 2>/dev/null \
+            | head -c "$(file_size "${OUT}")" | sha256sum | awk '{print $1}')"
+        [ "${want}" = "${got}" ] \
+            || die "readback hash mismatch (want ${want}, got ${got}); restore ${backup} with fastboot"
+        log "readback verified (${want})"
+    else
+        log "WARNING: sha256sum missing; readback not verified"
+    fi
+
+    command -v qbootctl >/dev/null 2>&1 && qbootctl 2>/dev/null || true
+    log "done. Reboot to try the new kernel."
+    log "If it fails to boot, slot retries fall back to Android (slot A);"
+    log "from fastboot you can restore: fastboot flash boot_b ${backup##*/} (copy it off first)"
+}
+
+case "${MODE}" in
+    stage) stage ;;
+    flash) flash ;;
+    *) echo "usage: $0 [stage|flash --yes]" >&2; exit 2 ;;
+esac

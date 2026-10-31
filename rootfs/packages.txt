@@ -7,6 +7,9 @@
 # sns.reg calibrations come from the device's own /persist partition, mounted
 # the LSM6DSO accelerometer via libssc → libqrtr-glib → kernel QRTR → ADSP SSC
 alacritty
+ananicy-cpp
+android-tools
+archlinux-contrib
 archlinuxarm-keyring
 avahi
 base
@@ -37,8 +40,12 @@ gnome-text-editor
 gnome-tweaks
 htop
 iio-sensor-proxy
+inxi
 iotop
+iproute2
+iw
 iwd
+libadwaita
 libqmi
 libssc
 linux-firmware
@@ -58,6 +65,7 @@ noto-fonts-emoji
 npm
 nss-mdns
 openssh
+pacman-contrib
 pipewire
 pipewire-alsa
 pipewire-pulse
@@ -72,11 +80,12 @@ rustup
 scx-scheds
 strace
 sudo
+ttf-dejavu
 ttf-fantasque-nerd
 ttf-fira-sans
-ttf-dejavu
 vim
 wget
+wireless-regdb
 wireplumber
 xdg-desktop-portal-gnome
 zram-generator

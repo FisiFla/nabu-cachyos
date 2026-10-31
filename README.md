@@ -8,26 +8,27 @@ running on the mainline-derived nabu kernel with CachyOS tuning.
 ## What this is
 
 - **Arch Linux ARM** rootfs, bootstrapped with `pacstrap` inside Docker
-- **Kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (`nabu/7.3.y`) plus the CachyOS config fragment (1000 Hz, full preemption, Btrfs, zram/zstd, THP)
+- **Kernel** from [Kumar-Jy's nabu tree](https://github.com/Kumar-Jy/linux) (`nabu/7.3.y`) plus the CachyOS 7.3 patch set (BORE, BBR3, ADIOS, v4l2loopback) and config fragment — every patch is build-critical, no silent skips; see `kernel/patches/SOURCES.md` and `kernel/verify-patches.sh`
 - **GNOME Shell 51 on Wayland** with a working on-screen keyboard, CachyOS theming and dconf tuning
 - **Verified on device:** WiFi + Bluetooth, Adreno 640 GPU, touchscreen and pen, **auto-rotation**, ambient light + proximity + accelerometer, USB serial console, **suspend/resume**, **battery reporting**, **hardware video decode (Iris VPU)**
 - **Supported by the kernel, not yet verified end to end:** quad speakers (CS35L41), charger, magnetic keyboard/cover, stylus buttons
 - **Known broken:** none that we know of — see [Known limitations](#known-limitations) for the rough edges
 - **Tablet UX:** GDM auto-login, no lock screen, tablet-sized UI, power button ignored on short press (long press still powers off)
-- `paru` + the CachyOS tool set (`cachyos-settings`, wallpapers, Plymouth animation, zsh/fish configs, Alacritty)
+- `paru` + the CachyOS tool set (`cachyos-settings`, Ananicy + CachyOS rules, `cachy-update`, wallpapers, Plymouth animation, zsh/fish configs, Alacritty)
 - **Direct boot** — Android bootimg format, no GRUB, no UEFI
 
 ## What this is not
 
 - **Not a port of CachyOS x86.** Most CachyOS packages are x86-only; only the architecture-neutral kernel/settings work is applied.
 - **Not a prebuilt kernel.** `boot.img` is always compiled from source during the build.
-- **Not tied to one install style.** You can replace Android (partition rename) *or* keep it side by side (partition carve). See [Installing](#installing).
+- **Not tied to one install style.** You can replace Android (partition rename), keep it side by side (partition carve), or reuse a `linux` partition another nabu installer already created. See [Installing](#installing).
 
 ---
 
 ## Installing
 
-Two install paths. Both start from a **release bundle** (or your own build) and an
+Three install paths, differing only in how the `linux` partition comes to
+exist. All start from a **release bundle** (or your own build) and an
 **unlocked bootloader**.
 
 ### 0. Get the files
@@ -36,22 +37,38 @@ Download every asset from the [latest release](https://github.com/FisiFla/nabu-c
 into one folder (or build your own — see [Building](#building)).
 
 You need on the host: `fastboot`, `zstd`, `adb`, and on macOS `simg2img`
-(`brew install android-platform-tools zstd simg2img`).
+(`brew install android-platform-tools zstd simg2img`). The partition scripts
+also need `python3` (preinstalled on most Linux/macOS setups; on macOS,
+`brew install python` if `python3 --version` fails). Windows hosts can only
+flash an already-prepared tablet — see
+[Windows hosts (flash only)](#windows-hosts-flash-only).
 
 ### 1. Prepare the partition table (choose one)
 
 The kernel boots with `root=PARTLABEL=linux`, but the stock Xiaomi table calls
-that partition `userdata`. Both options below rewrite the GPT with
+that partition `userdata`. Options A and B below rewrite the GPT with
 `tools/gpt-*.py` (both GPT copies, fresh CRC32s, verified by re-reading the
-table). The tablet must be in **Android with root** for the relabel, or in a
-**root-capable recovery** (TWRP booted with `fastboot boot`) / rooted ROM for the
-carve. Nothing about the carve touches Android's own partitions.
+table). Both scripts run from a **rooted ROM** (`su`/Magisk in Android) or a
+**root-capable recovery** (TWRP/OrangeFox booted with `fastboot boot`) and
+detect which. Both refuse to run when a partition named `linux` already
+exists — that tablet wants Option C, and a duplicate `PARTLABEL=linux` would
+leave the kernel and fastboot guessing which partition is meant. Before
+patching, both save the untouched GPT regions to
+`gpt-backups/<timestamp>/*-pristine.bin` next to the script, with a
+`metadata.txt` holding the exact geometry needed to write them back; a run
+that cannot save that backup does not touch the device.
 
 **Option A — replace Android** (simplest, keeps nothing from Android):
 
 ```bash
 bash relabel-partition.sh          # renames userdata -> linux in place
 ```
+
+This is the same physical partition postmarketOS flashes to, under a new
+name: pmOS's kernel looks for `userdata`, this kernel looks for `linux`, so
+flashing this image to a partition still *named* `userdata` would not boot.
+Android's slot A images are untouched, but its data partition is gone (see
+[Rolling back](#rolling-back)).
 
 **Option B — keep Android (dual boot)**:
 
@@ -62,8 +79,26 @@ bash carve-linux-partition.sh             # carve 30 GiB: --gib 50 for more
 
 The carve shortens `userdata` and appends a new `linux` partition out of its
 tail. The stock table has no free space, so this is the only way to keep
-Android. Both GPT regions are saved as `*-pristine.bin` first, so the operation
-is reversible.
+Android. Nothing about the carve touches Android's own partitions.
+
+**Option C — reuse an existing `linux` partition** (coming from another nabu
+Linux, e.g. Kumar-Jy's Arch images, whose partition tool already created
+`linux` + `esp`): run **neither** partition script. Go straight to step 2.
+
+- Flashing overwrites the rootfs currently on `linux`. Back up `/home` and
+  anything else you want from the old install first.
+- Android's `userdata` is untouched, so Android stays bootable from slot A.
+- The old `esp`/UEFI/rEFInd boot chain is left in place but unused: this
+  image boots directly from `boot_b`, so the old boot menu's Linux entry
+  will no longer work. Leaving `esp` in place is harmless.
+- The flasher aborts before writing anything when `linux` is smaller than
+  `image-size.txt` requires; on first boot `/` grows to fill the partition.
+  A too-small partition has to be enlarged with the partition tool that
+  created it (destructive) — relabelling or carving again will refuse.
+- To check what you have, use targeted probes only (`fastboot getvar all`
+  hangs on this firmware): `fastboot getvar partition-size:linux` and
+  `fastboot getvar current-slot`. The flasher writes slot B, so if Android
+  currently boots from slot B, stop and ask before flashing.
 
 > `userdata` is block-encrypted and was sized for the whole disk. Our test
 > device kept all its data after the carve, but Android may also decide the
@@ -84,13 +119,57 @@ is large enough, erases `dtbo_b`, flashes `vbmeta_disabled.img`, `boot.img` to
 
 CachyOS boots in about a minute.
 
-Optional SSH key injection (needs Docker locally) puts your `~/.ssh/id_ed25519.pub`
-into the image before flashing:
+Optional SSH key injection (macOS/Linux flasher only; needs Docker locally)
+puts your `~/.ssh/id_ed25519.pub` into the image before flashing:
 
 ```bash
 SSH_PUBKEY_FILE=~/.ssh/id_ed25519.pub bash flash.sh
 SKIP_SSH_KEY_INJECTION=1 bash flash.sh     # skip it
 ```
+
+### Windows hosts (flash only)
+
+> **Tested once on hardware.** Release v1.5.0 was successfully flashed to a
+> real nabu from Windows 11 / PowerShell 5.1 with Google platform-tools
+> 37.0.1 on 31 Oct 2026. This is still new code, so reports — working or
+> not — are welcome in an issue.
+
+There are **no Windows partition scripts**: Options A and B still need a
+macOS/Linux host. What works on Windows is step 2 alone, once a `linux`
+partition already exists — Option C tablets, or a tablet prepared earlier
+on another host.
+
+Prerequisites: Google *platform-tools* (`fastboot` on `PATH`), `zstd` on
+`PATH` (or `zstd.exe` next to the scripts), Windows PowerShell 5.1
+(preinstalled), and a working fastboot USB driver. Verify the driver
+before running the installer: with the tablet in fastboot mode,
+`fastboot devices` must list it.
+
+If that prints nothing and Device Manager shows **Android** with **Code
+28**, this is a driver problem, not a script problem. Nabu uses USB
+`VID_18D1&PID_D00D`, which Google's current standalone USB-driver INF does
+not list. Install the **Google Android Bootloader Interface** driver from
+Windows Update → Advanced options → Optional updates → Driver updates if
+offered. Otherwise use Device Manager → Android → Update driver → Browse
+my computer → Let me pick → Have Disk, select Google's
+`android_winusb.inf`, choose **Android Bootloader Interface**, and accept
+the compatibility warning. Re-check `fastboot devices` afterwards.
+
+From the release-bundle folder, in `cmd`:
+
+```
+join-and-flash.bat
+```
+
+The `.bat` files are thin launchers for `join-and-flash.ps1` / `flash.ps1`;
+running the `.ps1` directly from PowerShell works too. The same switches
+apply (`FORCE_FLASH=1`, `SKIP_SHA256_CHECK=1` — `set NAME=1` in cmd,
+`$env:NAME=1` in PowerShell). Differences from the macOS/Linux flasher: SSH
+key injection is skipped (add a key after first boot instead), and the
+Windows script converts the rootfs to Android sparse format in-script
+because Google's 32-bit Windows fastboot cannot buffer the ~10 GB raw
+image for `-S` sparsing. If any step before slot selection fails, slot B
+has not been set active, so slot A still boots.
 
 ### 3. First boot
 
@@ -114,10 +193,28 @@ the other slot is used, so a broken install falls back instead of looping.
 
 ### Rolling back
 
-- **Android**: `fastboot set_active a` (or the bootloader's own fallback).
+- **Android, dual boot (Options B and C)**: `fastboot set_active a` (or the
+  bootloader's own fallback). Android data is intact, except that Option B
+  may have made Android reformat `userdata` (see the carve warning above).
+- **Android after Option A**: `fastboot set_active a` boots the Android
+  images, but `userdata` was renamed and overwritten, so expect a factory
+  reset — Android data does not come back. For a clean stock system, use the
+  full-stock route below.
+- **Full stock ROM**: download the official nabu *fastboot* ROM (`.tgz`) for
+  your region and flash it from fastboot mode with MiFlash **Clean all** or
+  the package's `flash_all` script. This wipes everything. Never pick
+  **Clean all and lock**, and do not relock the bootloader until stock is
+  confirmed booting. If stock flashing errors on the partition table, stop:
+  restore the GPT first (next bullet) instead of forcing it.
 - **Old kernel/rootfs**: keep the previous `boot.img` and reflash it to `boot_b`.
-- **Partition table**: write the saved `*-pristine.bin` regions back, or run the
-  relabel in reverse (`NABU_OLD_LABEL=linux NABU_NEW_LABEL=userdata`).
+- **Partition table**: write back the `gpt-backups/<timestamp>/*-pristine.bin`
+  regions both partition scripts saved — `metadata.txt` next to them has the
+  exact `dd` commands (root adb, recovery or rooted ROM). After Option A you
+  can instead run the relabel in reverse
+  (`NABU_OLD_LABEL=linux NABU_NEW_LABEL=userdata`). There is no un-carve
+  script, so after Option B the pristine restore (or the full stock flash)
+  is the way back. Keep the `gpt-backups/` folder: deleting it deletes this
+  rollback.
 
 ---
 
@@ -167,6 +264,18 @@ and trust-me cases can pass `ALARM_ALLOW_UNVERIFIED=1`.
 
 ---
 
+## Updating a running system
+
+- Packages: `pacman -Syu` (or `cachy-update`, which also handles Chaotic-AUR).
+- Kernel from the tablet itself (new, on-device): stage a freshly built
+  `Image.gz` + DTB into `/boot/efi/`, then
+  `nabu-kernel-flash stage` to preview, `sudo nabu-kernel-flash flash --yes`
+  to write `boot_b`. It backs up the current partition first and never
+  touches Android slot A. `~/bin/kernel-update` covers the host-PC path.
+- A signed `[nabu-cachyos]` pacman repo for one-command kernel updates is
+  implemented but not live yet — the stanza ships commented in
+  `/etc/pacman.conf`. Maintainer steps: `packaging/README.md`.
+
 ## Credentials and SSH
 
 | Account | Password | Notes |
@@ -207,17 +316,17 @@ accounts, so `passwd -l root` would break root over SSH.
   session menu or `systemctl suspend`.
 - **Warm-reboot black screen** — after `fastboot reboot` the panel occasionally
   stays dark with no USB; a cold power cycle (hold Power ~15 s) recovers.
-- **`cachyos-packageinstaller`** — its AUR PKGBUILD fails on aarch64; the build
-  skips it. `paru` is the supported way to install packages.
+- **`cachyos-packageinstaller`** — still best-effort on aarch64 (upstream AUR
+  packaging gaps); the builder now ships its Qt6/Polkit makedepends, and the
+  build skips it with a warning if it fails. `paru` remains the supported way.
 - **`dbus-broker` → `dbus-daemon`** — the kernel lacks a namespace feature
   dbus-broker needs.
 - **Pen pressure** — not reported in landscape orientation.
-- **CachyOS kernel patches** — BORE/BBR3/ADIOS/cachy-arm are tuned for
-  kernel 6.16/6.17 and do **not** apply to the 7.3 nabu tree; the build skips
-  them and applies only `kernel/cachyos.config`. Set `KERNEL_URL`/`KERNEL_REF` to
-  the old tree if you want them.
-- **MGLRU / ADIOS / 1000 Hz** — MGLRU, zram/zstd, sysctl and systemd tuning are
-  applied; the ADIOS scheduler is not available on 7.3 (mq-deadline is used).
+- **CachyOS parity** — the 7.3 patch set (BORE, BBR3, ADIOS, v4l2loopback)
+  now applies to the nabu tree and is enforced (a drifting patch fails the
+  build). Desktop tuning constants are still not copied wholesale onto the
+  tablet. Full notes: `docs/cachyos-parity.md`; SCX experiments:
+  `docs/scx-scheds.md`.
 
 ## Why GNOME
 
@@ -249,13 +358,15 @@ and gesture navigation for free.
 build.sh                  # orchestrator (6 stages)
 Dockerfile                # ALARM-based build environment
 firmware/fetch-firmware.sh
-kernel/                   # build-kernel.sh, cachyos.config, patches/, enable-slpi.sh
+kernel/                   # build-kernel.sh, cachyos.config, patches/, enable-slpi.sh, verify-patches.sh
+packaging/                # linux-nabu-cachyos, nabu-boot-tools, keyring, pmac, torch + repo publishing
 rootfs/                   # build-rootfs.sh, build-qualcomm.sh, build-iio-sensor-proxy.sh,
                           # build-theming.sh, packages*.txt, upstream-pins.sh, overlay/
 image/build-image.sh
 release/                  # create-release.sh, flash.sh, join-and-flash.sh, inject-ssh-key.sh,
+                          # flash.ps1, join-and-flash.ps1 (+ .bat launchers; Windows),
                           # relabel-partition.sh, carve-linux-partition.sh
-tools/                    # gpt-relabel.py, gpt-carve.py, verify-alarm-tarball.sh
+tools/                    # gpt-relabel.py, gpt-carve.py, test_gpt_tools.py, verify-alarm-tarball.sh
 test/                     # QEMU harness (see below)
 docs/                     # hardware reference dumps from a working Android build
 ```
@@ -275,6 +386,9 @@ brew install qemu docker colima && colima start
 This exercises packages, systemd ordering, sshd and the shells. It cannot test
 nabu hardware (QEMU `-M virt` has no sm8150 devices), so touch, WiFi, audio,
 sensors and the like still need the real tablet.
+
+The GPT surgery tools have plain unit tests that run anywhere (synthetic GPT
+dumps, no tablet, no root): `python3 tools/test_gpt_tools.py`.
 
 ## Credits
 

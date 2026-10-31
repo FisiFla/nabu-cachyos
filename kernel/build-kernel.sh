@@ -132,16 +132,16 @@ if [ -f "${PATCH_SENTINEL}" ] && grep -qx "${EXPECTED_SENTINEL}" "${PATCH_SENTIN
     echo "Patches already applied (sentinel stamped, content verified)"
 fi
 if [ "${PATCH_SENTINEL_USED}" != "1" ]; then
-    # BORE (0001) is critical on the old 6.17 tree; the 7.3 nabu tree builds
-    # fine without the CachyOS patch set, so it can be emptied there with
-    # KERNEL_CRITICAL_PATCHES="" to make every patch best-effort.
-    # NAS-218 / NAS-247: the fastrpc INIT_CREATE_STATIC pageslen fix is critical
-    # on 6.17 — without it, SLPI sensorspd PD-create fails with EPIPE and the
-    # entire sensor stack stays dead. The 7.3 tree reworked that path, so it is
-    # optional there (the build uses attach mode).
+    # EVERY patch in the carried set is critical on the default tree
+    # (Kumar-Jy nabu/7.3.y): the set is rebased onto it and apply-verified
+    # (see patches/SOURCES.md and verify-patches.sh). The old behaviour —
+    # warn and skip whatever stopped applying — silently shipped a stock
+    # scheduler, dead SLPI sensors (fastrpc pageslen, NAS-218/NAS-247) and a
+    # dead VPU as upstream drifted. Builds against other trees can relax
+    # this with KERNEL_CRITICAL_PATCHES="" (all best-effort) or a subset.
     # shellcheck disable=SC2206  # deliberate word splitting of a space-separated list
     # Note: ${VAR-default} (no colon) so an explicit empty value means "no critical patches".
-    CRITICAL_PATCHES=(${KERNEL_CRITICAL_PATCHES-0001-bore 0005-fastrpc-fix-init-create-static-pageslen})
+    CRITICAL_PATCHES=(${KERNEL_CRITICAL_PATCHES-0001-bore-cachy 0002-bbr3 0003-adios 0004-v4l2loopback 0005-fastrpc-fix-init-create-static-pageslen 0006-iris-sm8150-hfi-init})
     echo "Applying patches..."
     unshallowed=0
     for patch in "${SCRIPT_DIR}"/patches/*.patch; do

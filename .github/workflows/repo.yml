@@ -1,0 +1,108 @@
+name: Package repo
+
+# UNTESTED end-to-end. Dry-run (unsigned, artifact only) is the default.
+# Signing/publishing is an explicit manual dispatch; see packaging/README.md
+# for the one-time secret + GitHub Pages setup.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sign:
+        description: Sign packages (needs NABU_GPG_PRIVATE_KEY secrets)
+        type: boolean
+        default: false
+      publish:
+        description: Publish repo to the gh-pages branch (requires sign)
+        type: boolean
+        default: false
+      build_kernel:
+        description: Also build linux-nabu-cachyos (hours)
+        type: boolean
+        default: false
+
+concurrency:
+  group: nabu-cachyos-package-repo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install makepkg toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pacman-package-manager curl git gnupg rsync python3
+
+      - name: Prepare local sources
+        run: bash packaging/prepare-sources.sh
+
+      - name: Build packages
+        env:
+          BUILD_KERNEL: ${{ inputs.build_kernel }}
+        run: |
+          mkdir -p packaging/repo
+          for pkgdir in packaging/*/; do
+            pkg="$(basename "${pkgdir}")"
+            [ -f "${pkgdir}/PKGBUILD" ] || continue
+            case "${pkg}" in
+              linux-nabu-cachyos)
+                [ "${BUILD_KERNEL}" = "true" ] || { echo "skip kernel (input off)"; continue; } ;;
+              nabu-cachyos-keyring)
+                [ -f "${pkgdir}/nabu-cachyos.gpg" ] || { echo "skip keyring (no public key)"; continue; } ;;
+            esac
+            work="/tmp/build-${pkg}"
+            sudo -n true
+            mkdir -p "${work}" && cp -a "${pkgdir}/." "${work}/"
+            chmod -R a+rwX "${work}"
+            (cd "${work}" && sudo -u nobody makepkg -f --noconfirm --nodeps --skipinteg)
+            cp -v "${work}"/*.pkg.tar.zst packaging/repo/
+          done
+          ls -la packaging/repo/
+
+      - name: Import signing key
+        if: ${{ inputs.sign }}
+        env:
+          NABU_GPG_PRIVATE_KEY: ${{ secrets.NABU_GPG_PRIVATE_KEY }}
+          NABU_GPG_PASSPHRASE: ${{ secrets.NABU_GPG_PASSPHRASE }}
+          NABU_GPG_KEY_ID: ${{ secrets.NABU_GPG_KEY_ID }}
+        run: |
+          [ -n "${NABU_GPG_PRIVATE_KEY}" ] && [ -n "${NABU_GPG_KEY_ID}" ]
+          gnupg_home="$(mktemp -d)"; chmod 700 "${gnupg_home}"
+          printf '%s' "${NABU_GPG_PRIVATE_KEY}" \
+            | GNUPGHOME="${gnupg_home}" gpg --batch --import
+          GNUPGHOME="${gnupg_home}" gpg --batch --list-keys --with-colons \
+            | awk -F: '/^fpr:/ {print $10}' | grep -iFxq "${NABU_GPG_KEY_ID}"
+          echo "GNUPGHOME=${gnupg_home}" >> "${GITHUB_ENV}"
+
+      - name: Build repo index
+        env:
+          SIGN: ${{ inputs.sign }}
+          NABU_GPG_KEY_ID: ${{ secrets.NABU_GPG_KEY_ID }}
+        run: |
+          if [ "${SIGN}" = "true" ]; then
+            REPO_DIR="${GITHUB_WORKSPACE}/packaging/repo" bash packaging/publish-repo.sh
+          else
+            echo "::warning::unsigned dry-run repository"
+            ALLOW_UNSIGNED=1 REPO_DIR="${GITHUB_WORKSPACE}/packaging/repo" bash packaging/publish-repo.sh
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nabu-cachyos-repo
+          path: packaging/repo/
+
+      - name: Publish to gh-pages
+        if: ${{ inputs.publish }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: packaging/repo
+          destination_dir: stable/aarch64
+          keep_files: true

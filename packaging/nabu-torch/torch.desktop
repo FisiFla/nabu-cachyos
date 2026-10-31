@@ -1,0 +1,24 @@
+[Desktop Entry]
+Name=Torch
+GenericName=Flashlight
+Comment=Hardware camera flashlight controller with intensity, strobe, and screen light
+Exec=torch
+Icon=torch
+Terminal=false
+Type=Application
+Categories=Utility;HardwareSettings;Accessibility;
+Keywords=torch;flashlight;nabu-torch;flash;light;led;strobe;sos;camera;brightness;intensity;
+StartupNotify=true
+Actions=Toggle;Max;Off;
+
+[Desktop Action Toggle]
+Name=Toggle Flashlight
+Exec=torch toggle
+
+[Desktop Action Max]
+Name=Full Brightness (100%)
+Exec=torch on 255
+
+[Desktop Action Off]
+Name=Turn Off
+Exec=torch off

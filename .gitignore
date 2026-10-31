@@ -24,3 +24,15 @@ docs/crdroid-live/CAMERA_ICP.elf
 
 # QEMU test harness
 test/log/
+
+# makepkg workdirs + prepare-sources.sh copies (canonical files live in
+# kernel/ and rootfs/overlay/)
+packaging/**/src/
+packaging/**/pkg/
+packaging/**/*.pkg.tar*
+packaging/linux-nabu-cachyos/*.patch
+packaging/linux-nabu-cachyos/cachyos.config
+packaging/linux-nabu-cachyos/enable-slpi.sh
+packaging/nabu-boot-tools/nabu-kernel-flash
+packaging/nabu-boot-tools/boot.cmdline
+packaging/repo/

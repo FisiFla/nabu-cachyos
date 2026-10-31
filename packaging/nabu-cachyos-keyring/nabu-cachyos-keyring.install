@@ -1,0 +1,9 @@
+post_install() {
+  if [ -x /usr/bin/pacman-key ]; then
+    pacman-key --populate nabu-cachyos || true
+  fi
+}
+
+post_upgrade() {
+  post_install
+}

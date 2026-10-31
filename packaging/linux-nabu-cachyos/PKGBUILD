@@ -1,0 +1,68 @@
+# Maintainer: Flavio Fisicaro <flavio@fisicaro.xyz>
+# UNTESTED: source-builds the nabu kernel exactly like kernel/build-kernel.sh
+# (same tree, patch set, defconfig, fragment, boot artifacts) and installs it
+# the pacman way. Run ../prepare-sources.sh first: it copies
+# kernel/patches/*.patch + kernel/cachyos.config next to this PKGBUILD.
+# A failed patch application aborts the build on purpose — see
+# kernel/patches/SOURCES.md for provenance and the current rebase state.
+
+pkgbase=linux-nabu-cachyos
+pkgname=('linux-nabu-cachyos')
+pkgver=7.3.1
+pkgrel=1
+pkgdesc="Linux kernel for Xiaomi Pad 5 (nabu) with the CachyOS patch set"
+arch=('aarch64')
+url="https://github.com/FisiFla/nabu-cachyos"
+license=('GPL-2.0-only')
+depends=('coreutils' 'kmod' 'nabu-boot-tools' 'android-tools')
+makedepends=('git' 'bc' 'bison' 'flex' 'dtc' 'cpio' 'python' 'kmod')
+provides=("linux=${pkgver}")
+options=('!strip')
+_kernelcommit="${NABU_KERNEL_COMMIT:-d3bc957cf96c6362a1f03fd9a44eb2a65381fdef}"
+source=("git+https://github.com/Kumar-Jy/linux.git#commit=${_kernelcommit}"
+        'cachyos.config' 'enable-slpi.sh'
+        '0001-bore-cachy.patch'
+        '0002-bbr3.patch'
+        '0003-adios.patch'
+        '0004-v4l2loopback.patch'
+        '0005-fastrpc-fix-init-create-static-pageslen.patch'
+        '0006-iris-sm8150-hfi-init.patch')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+  cd "${srcdir}/linux"
+  local patch
+  for patch in "${srcdir}"/000*.patch; do
+    echo "Applying $(basename "${patch}")"
+    git apply "${patch}"
+  done
+  # Same SLPI DTS enablement as the image build (all nabu sensors).
+  bash "${srcdir}/enable-slpi.sh"
+  make ARCH=arm64 nabu_defconfig
+  local frags=()
+  [ -f arch/arm64/configs/sm8150.config ] && frags+=(arch/arm64/configs/sm8150.config)
+  scripts/kconfig/merge_config.sh -m .config \
+    ${frags[@]+"${frags[@]}"} "${srcdir}/cachyos.config"
+  make ARCH=arm64 olddefconfig
+}
+
+build() {
+  cd "${srcdir}/linux"
+  make ARCH=arm64 -j"$(nproc)" Image.gz dtbs modules
+}
+
+package() {
+  cd "${srcdir}/linux"
+  local kernver
+  kernver="$(make -s ARCH=arm64 kernelrelease | tail -n 1)"
+  make ARCH=arm64 modules_install INSTALL_MOD_PATH="${pkgdir}/usr" DEPMOD=/bin/true
+  depmod -b "${pkgdir}/usr" "${kernver}" || true
+  rm -f "${pkgdir}/usr/lib/modules/${kernver}/build" \
+        "${pkgdir}/usr/lib/modules/${kernver}/source"
+  install -Dm644 arch/arm64/boot/Image.gz "${pkgdir}/boot/efi/Image.gz"
+  install -Dm644 arch/arm64/boot/dts/qcom/sm8150-xiaomi-nabu.dtb \
+    "${pkgdir}/boot/efi/sm8150-xiaomi-nabu.dtb"
+  printf '%s\n' "${kernver}" > "${pkgdir}/boot/efi/kernel-release"
+  install -Dm644 .config "${pkgdir}/boot/efi/config-${kernver}"
+  echo "Kernel ${kernver} staged. Run: nabu-kernel-flash stage && sudo nabu-kernel-flash flash --yes"
+}

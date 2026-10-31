@@ -1,0 +1,10 @@
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = linux-nabu-cachyos
+
+[Action]
+Description = Staging nabu boot image (stage only, boot partition untouched)...
+When = PostTransaction
+Exec = /usr/bin/nabu-kernel-flash stage

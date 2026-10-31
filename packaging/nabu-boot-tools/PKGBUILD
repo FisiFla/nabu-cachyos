@@ -1,0 +1,22 @@
+# Maintainer: Flavio Fisicaro <flavio@fisicaro.xyz>
+# Run ../prepare-sources.sh first: it copies the canonical helper + cmdline
+# from rootfs/overlay next to this PKGBUILD. UNTESTED on hardware.
+
+pkgname=nabu-boot-tools
+pkgver=1.0
+pkgrel=1
+pkgdesc="On-device boot image staging/flashing for nabu-cachyos direct boot"
+arch=('any')
+url="https://github.com/FisiFla/nabu-cachyos"
+license=('GPL-2.0-only')
+depends=('bash' 'android-tools' 'coreutils' 'util-linux')
+backup=('etc/nabu/boot.cmdline')
+source=('nabu-kernel-flash' '90-linux-nabu-cachyos-bootimg.hook' 'boot.cmdline')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -Dm755 "${srcdir}/nabu-kernel-flash" "${pkgdir}/usr/bin/nabu-kernel-flash"
+  install -Dm644 "${srcdir}/90-linux-nabu-cachyos-bootimg.hook" \
+    "${pkgdir}/usr/share/libalpm/hooks/90-linux-nabu-cachyos-bootimg.hook"
+  install -Dm644 "${srcdir}/boot.cmdline" "${pkgdir}/etc/nabu/boot.cmdline"
+}

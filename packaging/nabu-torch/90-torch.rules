@@ -1,0 +1,5 @@
+# Xiaomi Pad 5 (nabu) & Linux Torch Flashlight LED Hardware Access
+# Grants desktop session users and video group access to control LED torch brightness
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="white:flash", RUN+="/bin/chgrp -H -R video /sys/class/leds/%k", RUN+="/bin/chmod -R g+w /sys/class/leds/%k/", TAG+="uaccess"
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="*flash*", RUN+="/bin/chgrp -H -R video /sys/class/leds/%k", RUN+="/bin/chmod -R g+w /sys/class/leds/%k/", TAG+="uaccess"
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="*torch*", RUN+="/bin/chgrp -H -R video /sys/class/leds/%k", RUN+="/bin/chmod -R g+w /sys/class/leds/%k/", TAG+="uaccess"

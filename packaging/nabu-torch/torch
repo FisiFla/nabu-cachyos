@@ -1,0 +1,781 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Kumar-Jy <https://github.com/Kumar-Jy>
+# Part of nabu-pkgs (Hardware Flashlight & Torch Controller for Linux / Xiaomi Pad 5)
+
+import os
+import sys
+import time
+import json
+import glob
+import threading
+from pathlib import Path
+
+# --- Hardware LED Abstraction ---
+
+class TorchHardware:
+    """Manages sysfs LED hardware for camera flash / torch on Linux."""
+
+    def __init__(self):
+        self.led_path = self._detect_led_path()
+        self.max_brightness = self._read_int("max_brightness", default=255)
+
+    def _detect_led_path(self):
+        # Specific path for Xiaomi Pad 5 (sm8150 nabu)
+        primary = "/sys/class/leds/white:flash"
+        if os.path.exists(os.path.join(primary, "brightness")):
+            return primary
+
+        # General sysfs probes for mobile Linux & tablets
+        patterns = [
+            "/sys/class/leds/*:flash",
+            "/sys/class/leds/*:torch",
+            "/sys/class/leds/*flash*",
+            "/sys/class/leds/*torch*",
+        ]
+        for pat in patterns:
+            matches = sorted(glob.glob(pat))
+            for p in matches:
+                if os.path.exists(os.path.join(p, "brightness")):
+                    return p
+        return primary
+
+    def _read_int(self, node, default=0):
+        if not self.led_path:
+            return default
+        try:
+            with open(os.path.join(self.led_path, node), "r") as f:
+                return int(f.read().strip())
+        except Exception:
+            return default
+
+    def _write_int(self, node, value):
+        if not self.led_path:
+            return False
+        try:
+            with open(os.path.join(self.led_path, node), "w") as f:
+                f.write(str(int(value)))
+            return True
+        except PermissionError:
+            # Fallback using pkexec/sudo if permissions are missing
+            try:
+                import subprocess
+                p = os.path.join(self.led_path, node)
+                subprocess.run(["pkexec", "sh", "-c", f"echo {int(value)} > {p}"],
+                               check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return True
+            except Exception:
+                return False
+        except Exception:
+            return False
+
+    def is_available(self):
+        return bool(self.led_path and os.path.exists(self.led_path))
+
+    def get_device_name(self):
+        if not self.led_path:
+            return "No LED Found"
+        return os.path.basename(self.led_path)
+
+    def get_brightness(self):
+        return self._read_int("brightness", 0)
+
+    def is_on(self):
+        return self.get_brightness() > 0
+
+    def set_brightness(self, value):
+        val = max(0, min(self.max_brightness, int(value)))
+        return self._write_int("brightness", val)
+
+    def turn_on(self, value=None):
+        if value is None:
+            value = self.max_brightness
+        return self.set_brightness(value)
+
+    def turn_off(self):
+        return self.set_brightness(0)
+
+    def toggle(self, on_value=None):
+        if self.is_on():
+            self.turn_off()
+            return False
+        else:
+            self.turn_on(on_value)
+            return True
+
+
+# --- Configuration Storage ---
+
+CONFIG_DIR = Path.home() / ".config" / "torch"
+CONFIG_FILE = CONFIG_DIR / "config.json"
+
+DEFAULT_CONFIG = {
+    "intensity": 255,
+    "strobe_freq_hz": 4,
+    "auto_off_minutes": 0,
+    "screen_color": [1.0, 0.95, 0.85]  # Warm reading light
+}
+
+def load_config():
+    if not CONFIG_FILE.exists():
+        return DEFAULT_CONFIG.copy()
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            cfg = json.load(f)
+            return {**DEFAULT_CONFIG, **cfg}
+    except Exception:
+        return DEFAULT_CONFIG.copy()
+
+def save_config(cfg):
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+
+
+# --- CLI Command Handler ---
+
+def run_cli(args):
+    hw = TorchHardware()
+    cfg = load_config()
+    cmd = args[0].lower() if args else "status"
+
+    def parse_intensity(arg, default):
+        if not arg:
+            return default
+        arg = arg.strip()
+        if arg.endswith("%"):
+            try:
+                pct = float(arg[:-1])
+                return int((pct / 100.0) * hw.max_brightness)
+            except ValueError:
+                return default
+        try:
+            return int(arg)
+        except ValueError:
+            return default
+
+    if cmd in ("on", "start", "enable"):
+        val = parse_intensity(args[1] if len(args) > 1 else None, cfg.get("intensity", hw.max_brightness))
+        val = max(1, min(hw.max_brightness, val))
+        hw.turn_on(val)
+        cfg["intensity"] = val
+        save_config(cfg)
+        pct = int(round((val / hw.max_brightness) * 100))
+        print(f"Torch ON: {val}/{hw.max_brightness} ({pct}%) [{hw.get_device_name()}]")
+        return 0
+
+    elif cmd in ("off", "stop", "disable"):
+        hw.turn_off()
+        print("Torch OFF")
+        return 0
+
+    elif cmd in ("toggle", "t"):
+        target_val = cfg.get("intensity", hw.max_brightness)
+        state = hw.toggle(target_val)
+        if state:
+            pct = int(round((target_val / hw.max_brightness) * 100))
+            print(f"Torch ON: {target_val}/{hw.max_brightness} ({pct}%)")
+        else:
+            print("Torch OFF")
+        return 0
+
+    elif cmd in ("set", "brightness", "level", "intensity"):
+        if len(args) < 2:
+            print("Error: Specify a brightness value (1-255 or 1-100%).", file=sys.stderr)
+            return 1
+        val = parse_intensity(args[1], cfg.get("intensity", hw.max_brightness))
+        val = max(0, min(hw.max_brightness, val))
+        hw.set_brightness(val)
+        if val > 0:
+            cfg["intensity"] = val
+            save_config(cfg)
+        pct = int(round((val / hw.max_brightness) * 100))
+        print(f"Torch level set to: {val}/{hw.max_brightness} ({pct}%)")
+        return 0
+
+    elif cmd in ("status", "get", "info"):
+        cur = hw.get_brightness()
+        pct = int(round((cur / hw.max_brightness) * 100)) if hw.max_brightness else 0
+        state = "ON" if cur > 0 else "OFF"
+        print(f"Device:     {hw.get_device_name()} ({hw.led_path})")
+        print(f"State:      {state}")
+        print(f"Brightness: {cur}/{hw.max_brightness} ({pct}%)")
+        print("Author:     Kumar-Jy <https://github.com/Kumar-Jy>")
+        return 0
+
+    elif cmd in ("strobe", "flash"):
+        freq = float(args[1]) if len(args) > 1 else 4.0
+        val = cfg.get("intensity", hw.max_brightness)
+        delay = 1.0 / (freq * 2)
+        print(f"Strobe active at {freq:.1f} Hz (Ctrl+C to stop)...")
+        try:
+            while True:
+                hw.set_brightness(val)
+                time.sleep(delay)
+                hw.set_brightness(0)
+                time.sleep(delay)
+        except KeyboardInterrupt:
+            hw.set_brightness(0)
+            print("\nStrobe stopped.")
+        return 0
+
+    elif cmd == "sos":
+        val = cfg.get("intensity", hw.max_brightness)
+        print("Transmitting SOS beacon (... --- ...) [Ctrl+C to stop]...")
+        unit = 0.2
+        pattern = [
+            (unit, unit), (unit, unit), (unit, unit * 3),        # S (...)
+            (unit * 3, unit), (unit * 3, unit), (unit * 3, unit * 3), # O (---)
+            (unit, unit), (unit, unit), (unit, unit * 7)         # S (...)
+        ]
+        try:
+            while True:
+                for on_dur, off_dur in pattern:
+                    hw.set_brightness(val)
+                    time.sleep(on_dur)
+                    hw.set_brightness(0)
+                    time.sleep(off_dur)
+        except KeyboardInterrupt:
+            hw.set_brightness(0)
+            print("\nSOS stopped.")
+        return 0
+
+    elif cmd in ("-h", "--help", "help"):
+        print("torch - Hardware Flashlight & Torch Controller v1.0.0")
+        print("Created by Kumar-Jy <https://github.com/Kumar-Jy>")
+        print("\nUsage: torch [command] [options]")
+        print("\nCommands:")
+        print("  (none)             Launch graphical torch control interface")
+        print("  on [level]         Turn on torch (level: 1-255 or 1-100%)")
+        print("  off                Turn off torch")
+        print("  toggle             Toggle torch state")
+        print("  set <level>        Set torch intensity without changing on/off state")
+        print("  status             Show current torch hardware status and brightness")
+        print("  strobe [freq_hz]   Blink torch rapidly at given frequency (default: 4 Hz)")
+        print("  sos                Emit Morse code SOS emergency distress signal")
+        print("  --help, -h         Show this help message")
+        return 0
+
+    else:
+        # Check if argument is a direct intensity number (e.g. `torch 80%` or `torch 200`)
+        val = parse_intensity(cmd, None)
+        if val is not None:
+            val = max(0, min(hw.max_brightness, val))
+            hw.set_brightness(val)
+            if val > 0:
+                cfg["intensity"] = val
+                save_config(cfg)
+            pct = int(round((val / hw.max_brightness) * 100))
+            print(f"Torch level set to: {val}/{hw.max_brightness} ({pct}%)")
+            return 0
+        print(f"Unknown command: {cmd}. Use 'torch --help' for usage.", file=sys.stderr)
+        return 1
+
+
+# --- Libadwaita GUI Application ---
+
+def run_gui():
+    import gi
+    gi.require_version('Gtk', '4.0')
+    gi.require_version('Adw', '1')
+    from gi.repository import Gtk, Adw, GLib, Gdk, Pango
+
+    class TorchWindow(Adw.ApplicationWindow):
+        def __init__(self, app):
+            super().__init__(application=app, title="Torch")
+            self.set_default_size(320, 480)
+            self.set_size_request(270, 390)
+
+            self.hw = TorchHardware()
+            self.config = load_config()
+
+            # State
+            self.strobe_active = False
+            self.strobe_thread = None
+            self.sos_active = False
+            self.sos_thread = None
+            self.auto_off_timer_id = None
+            self.auto_off_remaining_s = 0
+            self.screen_light_active = False
+
+            # Custom CSS Styling
+            self._apply_css()
+
+            # Build User Interface
+            self._build_ui()
+
+            # Restore state from hardware
+            self._sync_ui_state()
+
+        def _apply_css(self):
+            css_provider = Gtk.CssProvider()
+            css_data = """
+            .torch-power-btn {
+                border-radius: 9999px;
+                padding: 20px;
+                background: linear-gradient(145deg, #1e293b, #0f172a);
+                border: 2.5px solid #334155;
+                box-shadow: 0 6px 18px -3px rgba(0, 0, 0, 0.45);
+                transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .torch-power-btn:hover {
+                background: linear-gradient(145deg, #334155, #1e293b);
+                border-color: #475569;
+                transform: scale(1.02);
+            }
+            .torch-power-btn.active {
+                background: radial-gradient(circle, #fef08a 0%, #facc15 50%, #eab308 100%);
+                border-color: #ffffff;
+                box-shadow: 0 0 32px 8px rgba(250, 204, 21, 0.6), 0 0 10px 3px rgba(254, 240, 138, 0.85);
+                transform: scale(1.03);
+            }
+            .torch-power-btn.active:hover {
+                background: radial-gradient(circle, #ffffff 0%, #fde047 50%, #facc15 100%);
+                box-shadow: 0 0 42px 10px rgba(250, 204, 21, 0.75);
+            }
+            .torch-power-icon {
+                color: #94a3b8;
+                transition: color 250ms ease;
+            }
+            .torch-power-btn.active .torch-power-icon {
+                color: #0f172a;
+            }
+            .torch-status-label {
+                font-weight: 700;
+                font-size: 1.02rem;
+                letter-spacing: 0.3px;
+            }
+            .preset-btn {
+                font-weight: 600;
+                border-radius: 10px;
+                padding: 6px 10px;
+                font-size: 0.85rem;
+            }
+            .creator-badge {
+                font-size: 0.78rem;
+                opacity: 0.7;
+            }
+            .screen-lantern {
+                background-color: #fff8e7;
+            }
+            """
+            css_provider.load_from_data(css_data.encode())
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(),
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        def _show_about(self, _btn):
+            about = Adw.AboutDialog()
+            about.set_application_name("Torch")
+            about.set_application_icon("torch")
+            about.set_version("1.0.0")
+            about.set_developer_name("Kumar-Jy")
+            about.set_developers(["Kumar-Jy <https://github.com/Kumar-Jy>"])
+            about.set_website("https://github.com/Kumar-Jy/nabu-pkgs")
+            about.set_issue_url("https://github.com/Kumar-Jy/nabu-pkgs/issues")
+            about.set_license_type(Gtk.License.MIT_X11)
+            about.set_comments("Hardware camera flashlight and torch controller with intensity control for Xiaomi Pad 5 (nabu)")
+            about.present(self)
+
+        def _build_ui(self):
+            root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            self.set_content(root_box)
+
+            # --- Header Bar ---
+            header = Adw.HeaderBar()
+            header.set_title_widget(Adw.WindowTitle(title="Flashlight", subtitle="by Kumar-Jy"))
+
+            # About Button
+            btn_about = Gtk.Button(icon_name="help-about-symbolic")
+            btn_about.set_tooltip_text("About Torch by Kumar-Jy")
+            btn_about.connect("clicked", self._show_about)
+            header.pack_start(btn_about)
+
+            # Screen Torch Button
+            btn_screen = Gtk.Button(icon_name="display-brightness-symbolic")
+            btn_screen.set_tooltip_text("Screen Lantern / Ambient Light")
+            btn_screen.connect("clicked", self._open_screen_lantern)
+            header.pack_end(btn_screen)
+
+            root_box.append(header)
+
+            # --- Scrollable Content with AdwClamp ---
+            scrolled = Gtk.ScrolledWindow(vexpand=True, hexpand=True)
+            scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            root_box.append(scrolled)
+
+            clamp = Adw.Clamp(maximum_size=380, tightening_threshold=300)
+            clamp.set_margin_top(12)
+            clamp.set_margin_bottom(14)
+            clamp.set_margin_start(12)
+            clamp.set_margin_end(12)
+            scrolled.set_child(clamp)
+
+            content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+            clamp.set_child(content_box)
+
+            # --- Big Power Toggle Button ---
+            hero_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, halign=Gtk.Align.CENTER)
+            content_box.append(hero_box)
+
+            self.btn_power = Gtk.Button()
+            self.btn_power.add_css_class("torch-power-btn")
+            self.btn_power.set_size_request(100, 100)
+            self.btn_power.connect("clicked", self._on_power_clicked)
+
+            self.icon_power = Gtk.Image.new_from_icon_name("weather-clear-symbolic")
+            self.icon_power.set_pixel_size(46)
+            self.icon_power.add_css_class("torch-power-icon")
+            self.btn_power.set_child(self.icon_power)
+            hero_box.append(self.btn_power)
+
+            self.lbl_status = Gtk.Label(label="Flashlight Off")
+            self.lbl_status.add_css_class("torch-status-label")
+            hero_box.append(self.lbl_status)
+
+            # --- Brightness & Intensity Controls ---
+            group_brightness = Adw.PreferencesGroup(
+                title="Brightness and Intensity",
+                description="Adjust flashlight power level"
+            )
+            content_box.append(group_brightness)
+
+            # Intensity Scale Slider
+            row_slider = Adw.ActionRow(title="Torch Intensity")
+            self.lbl_pct = Gtk.Label(label="100%")
+            self.lbl_pct.add_css_class("dim-label")
+            row_slider.add_suffix(self.lbl_pct)
+            group_brightness.add(row_slider)
+
+            slider_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            slider_box.set_margin_start(12)
+            slider_box.set_margin_end(12)
+            slider_box.set_margin_top(4)
+            slider_box.set_margin_bottom(12)
+
+            self.scale_intensity = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, self.hw.max_brightness, 1)
+            self.scale_intensity.set_hexpand(True)
+            self.scale_intensity.set_value(self.config.get("intensity", self.hw.max_brightness))
+            self.scale_intensity.connect("value-changed", self._on_intensity_changed)
+            slider_box.append(self.scale_intensity)
+
+            # Quick Preset Buttons (25%, 50%, 75%, 100%)
+            preset_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, homogeneous=True)
+            for pct_label, frac in [("25%", 0.25), ("50%", 0.50), ("75%", 0.75), ("Max", 1.0)]:
+                btn = Gtk.Button(label=pct_label)
+                btn.add_css_class("preset-btn")
+                btn.connect("clicked", lambda _, f=frac: self._set_preset(f))
+                preset_box.append(btn)
+            slider_box.append(preset_box)
+
+            group_brightness.add(slider_box)
+
+            # --- Special Features & Safety ---
+            group_modes = Adw.PreferencesGroup(title="Special Modes and Timer")
+            content_box.append(group_modes)
+
+            # Strobe Mode Switch
+            self.row_strobe = Adw.ActionRow(title="Strobe Light Mode", subtitle="Rapid blinking beacon")
+            self.switch_strobe = Gtk.Switch(valign=Gtk.Align.CENTER)
+            self.switch_strobe.connect("notify::active", self._on_strobe_toggled)
+            self.row_strobe.add_suffix(self.switch_strobe)
+            group_modes.add(self.row_strobe)
+
+            # Strobe Speed Slider
+            self.row_freq = Adw.ActionRow(title="Strobe Frequency")
+            self.lbl_freq = Gtk.Label(label=f"{self.config.get('strobe_freq_hz', 4)} Hz")
+            self.lbl_freq.add_css_class("dim-label")
+            self.row_freq.add_suffix(self.lbl_freq)
+
+            self.scale_freq = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 10, 1)
+            self.scale_freq.set_hexpand(True)
+            self.scale_freq.set_value(self.config.get("strobe_freq_hz", 4))
+            self.scale_freq.connect("value-changed", self._on_freq_changed)
+            
+            freq_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            freq_box.set_margin_start(12)
+            freq_box.set_margin_end(12)
+            freq_box.set_margin_bottom(12)
+            freq_box.append(self.scale_freq)
+            
+            self.row_freq_box = freq_box
+            group_modes.add(self.row_freq)
+            group_modes.add(self.row_freq_box)
+            self._update_freq_visibility()
+
+            # SOS Mode Switch
+            self.row_sos = Adw.ActionRow(title="Emergency SOS", subtitle="Morse code distress signal (... --- ...)")
+            self.switch_sos = Gtk.Switch(valign=Gtk.Align.CENTER)
+            self.switch_sos.connect("notify::active", self._on_sos_toggled)
+            self.row_sos.add_suffix(self.switch_sos)
+            group_modes.add(self.row_sos)
+
+            # Auto-Off Timer Dropdown
+            self.row_timer = Adw.ActionRow(title="Auto-Off Timer", subtitle="Prevent battery drain and heating")
+            timer_options = ["Disabled", "1 Minute", "2 Minutes", "5 Minutes", "10 Minutes", "15 Minutes"]
+            self.combo_timer = Gtk.DropDown.new_from_strings(timer_options)
+            self.combo_timer.set_valign(Gtk.Align.CENTER)
+            self.combo_timer.connect("notify::selected", self._on_timer_selected)
+            self.row_timer.add_suffix(self.combo_timer)
+            group_modes.add(self.row_timer)
+
+            # --- Creator Credits Footer ---
+            footer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, halign=Gtk.Align.CENTER)
+            footer_box.set_margin_top(6)
+            footer_box.set_margin_bottom(6)
+
+            btn_credit = Gtk.LinkButton(uri="https://github.com/Kumar-Jy", label="Created by Kumar-Jy")
+            btn_credit.add_css_class("flat")
+            btn_credit.add_css_class("creator-badge")
+            footer_box.append(btn_credit)
+            content_box.append(footer_box)
+
+            # Keyboard Shortcuts
+            key_controller = Gtk.EventControllerKey()
+            key_controller.connect("key-pressed", self._on_key_pressed)
+            self.add_controller(key_controller)
+
+        def _update_freq_visibility(self):
+            is_strobe = self.switch_strobe.get_active()
+            self.row_freq.set_visible(is_strobe)
+            self.row_freq_box.set_visible(is_strobe)
+
+        def _sync_ui_state(self):
+            cur = self.hw.get_brightness()
+            is_on = cur > 0
+            if is_on:
+                self.btn_power.add_css_class("active")
+                self.icon_power.set_from_icon_name("weather-clear-symbolic")
+                pct = int(round((cur / self.hw.max_brightness) * 100))
+                self.lbl_status.set_label(f"Active ({pct}%)")
+                self.scale_intensity.set_value(cur)
+            else:
+                self.btn_power.remove_css_class("active")
+                self.icon_power.set_from_icon_name("weather-clear-symbolic")
+                self.lbl_status.set_label("Flashlight Off")
+
+            pct = int(round((self.scale_intensity.get_value() / self.hw.max_brightness) * 100))
+            self.lbl_pct.set_label(f"{pct}%")
+
+        def _on_power_clicked(self, _btn):
+            # Stop any active special modes
+            if self.strobe_active:
+                self.switch_strobe.set_active(False)
+            if self.sos_active:
+                self.switch_sos.set_active(False)
+
+            if self.hw.is_on():
+                self.hw.turn_off()
+                self._stop_auto_off_timer()
+            else:
+                val = int(self.scale_intensity.get_value())
+                self.hw.turn_on(val)
+                self._start_auto_off_timer_if_configured()
+
+            self._sync_ui_state()
+
+        def _on_intensity_changed(self, scale):
+            val = int(scale.get_value())
+            pct = int(round((val / self.hw.max_brightness) * 100))
+            self.lbl_pct.set_label(f"{pct}%")
+            self.config["intensity"] = val
+            save_config(self.config)
+
+            # If torch or special modes are on, live-update intensity
+            if self.hw.is_on() and not self.strobe_active and not self.sos_active:
+                self.hw.set_brightness(val)
+                self.lbl_status.set_label(f"Active ({pct}%)")
+
+        def _set_preset(self, fraction):
+            val = max(1, int(self.hw.max_brightness * fraction))
+            self.scale_intensity.set_value(val)
+            if not self.hw.is_on():
+                # Clicking preset turns it on at that level
+                self.hw.turn_on(val)
+                self._start_auto_off_timer_if_configured()
+                self._sync_ui_state()
+
+        def _on_strobe_toggled(self, switch, _pspec):
+            self._update_freq_visibility()
+            if switch.get_active():
+                if self.sos_active:
+                    self.switch_sos.set_active(False)
+                self.strobe_active = True
+                self.btn_power.add_css_class("active")
+                self.lbl_status.set_label("Strobe Active")
+                self.strobe_thread = threading.Thread(target=self._strobe_worker, daemon=True)
+                self.strobe_thread.start()
+            else:
+                self.strobe_active = False
+                self.hw.turn_off()
+                self._sync_ui_state()
+
+        def _strobe_worker(self):
+            while self.strobe_active:
+                freq = float(self.scale_freq.get_value())
+                delay = 1.0 / (freq * 2)
+                val = int(self.scale_intensity.get_value())
+                self.hw.set_brightness(val)
+                time.sleep(delay)
+                self.hw.set_brightness(0)
+                time.sleep(delay)
+            self.hw.set_brightness(0)
+
+        def _on_freq_changed(self, scale):
+            freq = int(scale.get_value())
+            self.lbl_freq.set_label(f"{freq} Hz")
+            self.config["strobe_freq_hz"] = freq
+            save_config(self.config)
+
+        def _on_sos_toggled(self, switch, _pspec):
+            if switch.get_active():
+                if self.strobe_active:
+                    self.switch_strobe.set_active(False)
+                self.sos_active = True
+                self.btn_power.add_css_class("active")
+                self.lbl_status.set_label("SOS Transmitting...")
+                self.sos_thread = threading.Thread(target=self._sos_worker, daemon=True)
+                self.sos_thread.start()
+            else:
+                self.sos_active = False
+                self.hw.turn_off()
+                self._sync_ui_state()
+
+        def _sos_worker(self):
+            unit = 0.2
+            pattern = [
+                (unit, unit), (unit, unit), (unit, unit * 3),        # S (...)
+                (unit * 3, unit), (unit * 3, unit), (unit * 3, unit * 3), # O (---)
+                (unit, unit), (unit, unit), (unit, unit * 7)         # S (...)
+            ]
+            while self.sos_active:
+                val = int(self.scale_intensity.get_value())
+                for on_dur, off_dur in pattern:
+                    if not self.sos_active:
+                        break
+                    self.hw.set_brightness(val)
+                    time.sleep(on_dur)
+                    self.hw.set_brightness(0)
+                    time.sleep(off_dur)
+            self.hw.set_brightness(0)
+
+        def _on_timer_selected(self, dropdown, _pspec):
+            idx = dropdown.get_selected()
+            minutes_map = [0, 1, 2, 5, 10, 15]
+            mins = minutes_map[idx]
+            self.config["auto_off_minutes"] = mins
+            save_config(self.config)
+            if self.hw.is_on():
+                self._start_auto_off_timer_if_configured()
+
+        def _start_auto_off_timer_if_configured(self):
+            self._stop_auto_off_timer()
+            mins = self.config.get("auto_off_minutes", 0)
+            if mins > 0:
+                self.auto_off_remaining_s = mins * 60
+                self.auto_off_timer_id = GLib.timeout_add_seconds(1, self._on_auto_off_tick)
+
+        def _stop_auto_off_timer(self):
+            if self.auto_off_timer_id:
+                GLib.source_remove(self.auto_off_timer_id)
+                self.auto_off_timer_id = None
+            self.row_timer.set_subtitle("Prevent battery drain and heating")
+
+        def _on_auto_off_tick(self):
+            if not self.hw.is_on():
+                self._stop_auto_off_timer()
+                return False
+            self.auto_off_remaining_s -= 1
+            if self.auto_off_remaining_s <= 0:
+                self.hw.turn_off()
+                self._sync_ui_state()
+                self._stop_auto_off_timer()
+                return False
+            m, s = divmod(self.auto_off_remaining_s, 60)
+            self.row_timer.set_subtitle(f"Auto-turning off in {m}m {s:02d}s")
+            return True
+
+        # --- Screen Lantern Mode ---
+        def _open_screen_lantern(self, _btn):
+            dialog = Adw.Window(transient_for=self, modal=True, title="Screen Light")
+            dialog.set_default_size(480, 520)
+
+            main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            dialog.set_content(main_box)
+
+            d_header = Adw.HeaderBar()
+            main_box.append(d_header)
+
+            color_canvas = Gtk.Box(vexpand=True, hexpand=True)
+            color_canvas.add_css_class("screen-lantern")
+            main_box.append(color_canvas)
+
+            ctrl_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+            ctrl_box.set_margin_start(16)
+            ctrl_box.set_margin_end(16)
+            ctrl_box.set_margin_top(12)
+            ctrl_box.set_margin_bottom(16)
+            main_box.append(ctrl_box)
+
+            lbl_w = Gtk.Label(label="Color Warmth:")
+            ctrl_box.append(lbl_w)
+
+            warmth_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 3, 1)
+            warmth_scale.set_hexpand(True)
+            warmth_scale.set_value(2)
+
+            def on_warmth_changed(s):
+                v = int(s.get_value())
+                colors = {
+                    1: "#fef3c7", # Warm Candle
+                    2: "#fffbeb", # Soft Reading Warmth
+                    3: "#ffffff"  # Cool Pure Daylight
+                }
+                c = colors.get(v, "#ffffff")
+                dialog.get_surface()
+
+            ctrl_box.append(warmth_scale)
+            dialog.present()
+
+        def _on_key_pressed(self, _ctrl, keyval, _keycode, _state):
+            if keyval in (Gdk.KEY_space, Gdk.KEY_Return):
+                self._on_power_clicked(None)
+                return True
+            elif keyval == Gdk.KEY_Up:
+                cur = self.scale_intensity.get_value()
+                self.scale_intensity.set_value(min(self.hw.max_brightness, cur + 25))
+                return True
+            elif keyval == Gdk.KEY_Down:
+                cur = self.scale_intensity.get_value()
+                self.scale_intensity.set_value(max(1, cur - 25))
+                return True
+            return False
+
+    class TorchApp(Adw.Application):
+        def __init__(self):
+            super().__init__(application_id="io.github.kumar_jy.torch")
+
+        def do_activate(self):
+            win = self.props.active_window
+            if not win:
+                win = TorchWindow(self)
+            win.present()
+
+    app = TorchApp()
+    return app.run([])
+
+
+def main():
+    if len(sys.argv) > 1:
+        sys.exit(run_cli(sys.argv[1:]))
+    else:
+        sys.exit(run_gui())
+
+
+if __name__ == "__main__":
+    main()

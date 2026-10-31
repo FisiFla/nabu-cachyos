@@ -1,0 +1,28 @@
+# Maintainer: Flavio Fisicaro <flavio@fisicaro.xyz>
+# REQUIRES maintainer-provided key material next to this PKGBUILD:
+#   nabu-cachyos.gpg       armored public key(s) used to sign repo packages
+#   nabu-cachyos-trusted   lines of "<fingerprint>:4:"
+#   nabu-cachyos-revoked   revoked fingerprints, may start empty
+# See packaging/README.md for key generation. CI skips this package while
+# nabu-cachyos.gpg is absent. Never commit a private key.
+
+pkgname=nabu-cachyos-keyring
+pkgver=1.0
+pkgrel=1
+pkgdesc="Signing keys for the nabu-cachyos package repository"
+arch=('any')
+url="https://github.com/FisiFla/nabu-cachyos"
+license=('GPL-2.0-only')
+depends=('pacman')
+install="${pkgname}.install"
+source=('nabu-cachyos.gpg' 'nabu-cachyos-trusted' 'nabu-cachyos-revoked')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -Dm644 "${srcdir}/nabu-cachyos.gpg" \
+    "${pkgdir}/usr/share/pacman/keyrings/nabu-cachyos.gpg"
+  install -Dm644 "${srcdir}/nabu-cachyos-trusted" \
+    "${pkgdir}/usr/share/pacman/keyrings/nabu-cachyos-trusted"
+  install -Dm644 "${srcdir}/nabu-cachyos-revoked" \
+    "${pkgdir}/usr/share/pacman/keyrings/nabu-cachyos-revoked"
+}

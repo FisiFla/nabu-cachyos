@@ -1,0 +1,45 @@
+# Imported from Kumar-Jy/nabu-pkgs @ 0ba83295a59f2f868a5f73a50a56a69a3f1a7ea3 (2026-10-31),
+# local-file sha256sums filled in. UNTESTED in nabu-cachyos builds.
+# Maintainer: Kumar-Jy <https://github.com/Kumar-Jy>
+# Hardware Flashlight & Torch Controller for Linux / Xiaomi Pad 5
+
+pkgbase=nabu-torch
+pkgname=('nabu-torch' 'torch')
+pkgver=1.0.0
+pkgrel=1
+arch=('any')
+url="https://github.com/Kumar-Jy/nabu-pkgs"
+license=('MIT')
+depends=('python' 'python-gobject' 'libadwaita' 'gtk4' 'hicolor-icon-theme')
+source=('torch'
+        'torch.desktop'
+        'torch.svg'
+        '90-torch.rules'
+        'LICENSE'
+        'README.md')
+sha256sums=('4928fee8c7ef6f34a08386006492628a487eda62ae1b30d19076d0465a83230a'
+            'db23ca0f1788ef974422fd5b7e35a749de96513beba07253661cc863c708883f'
+            'f8e357aec121687f5fa22778f1fde729aa2ec63d3f5c5c2efe100bfc5ab2f1e6'
+            '89a92e3200a4baa62c01229458862cd0e166ad08410b40d07fb1a556601c0eb5'
+            'ea44b2bb66f5b266322cc50ae46f8c33ac0d66798421610f0f5e6c813ddad0f4'
+            'd9c1001838196df15b3fd1ce1d3dad0eb72908f4fb577500ffdee2df18e8906a')
+
+package_nabu-torch() {
+  pkgdesc="Hardware camera flashlight and torch controller with intensity control for Xiaomi Pad 5 (nabu)"
+  provides=('flashlight')
+
+  install -Dm755 "$srcdir/torch" "$pkgdir/usr/bin/torch"
+  ln -sf torch "$pkgdir/usr/bin/nabu-torch"
+  ln -sf torch "$pkgdir/usr/bin/flashlight"
+  install -Dm644 "$srcdir/torch.desktop" "$pkgdir/usr/share/applications/torch.desktop"
+  install -Dm644 "$srcdir/torch.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/torch.svg"
+  install -Dm644 "$srcdir/torch.svg" "$pkgdir/usr/share/pixmaps/torch.svg"
+  install -Dm644 "$srcdir/90-torch.rules" "$pkgdir/usr/lib/udev/rules.d/90-torch.rules"
+  install -Dm644 "$srcdir/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+
+package_torch() {
+  pkgdesc="Hardware camera flashlight and torch controller (metapackage for nabu-torch)"
+  depends=('nabu-torch')
+}

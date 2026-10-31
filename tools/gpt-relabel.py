@@ -195,6 +195,17 @@ def find_partition(array, header, wanted):
     return None, None
 
 
+def find_partitions(array, header, wanted):
+    """Return [(index, byte offset), ...] for every entry named `wanted`."""
+    hits = []
+    for i in range(header["num_entries"]):
+        off = i * header["entry_size"]
+        raw = array[off + ENTRY_NAME_OFFSET:off + header["entry_size"]]
+        if decode_name(raw) == wanted:
+            hits.append((i, off))
+    return hits
+
+
 def list_partitions(dev, header, array):
     """Yield (index, name, first_lba, last_lba) for every named entry."""
     for i in range(header["num_entries"]):
@@ -212,11 +223,27 @@ def patch_one_gpt(dev, hdr_lba, old_name, new_name, dry_run):
     Returns a dict describing what was done, or None when the partition is
     not present in this copy of the GPT.
     """
+    if old_name == new_name:
+        raise GptError("old and new labels are both %r — nothing to rename" % old_name)
     header = dev.read_header(hdr_lba)
     array, array_len = read_entry_array(dev, header)
-    idx, off = find_partition(array, header, old_name)
-    if idx is None:
+    old_hits = find_partitions(array, header, old_name)
+    if not old_hits:
         return None
+    if len(old_hits) > 1:
+        raise GptError(
+            "more than one partition named %r — refusing to guess which one to rename"
+            % old_name)
+    # A table that already grew a `linux` partition elsewhere (e.g. carved by
+    # another nabu installer) must not gain a second one: PARTLABEL lookup
+    # and `fastboot flash linux` would silently pick one of the two.
+    new_hits = find_partitions(array, header, new_name)
+    if new_hits:
+        raise GptError(
+            "a partition named %r already exists (entry #%d) — refusing to create "
+            "a duplicate PARTLABEL; reuse that partition, or rename/remove it first"
+            % (new_name, new_hits[0][0]))
+    idx, off = old_hits[0]
 
     array[off + ENTRY_NAME_OFFSET:off + header["entry_size"]] = encode_name(
         new_name, header["entry_size"])

@@ -20,6 +20,12 @@
 # already (TWRP/OrangeFox: `adb shell id -u` is 0, no su binary) and from a
 # rooted ROM via `su -c`.  The mode is detected.
 #
+# Before anything is patched, the untouched GPT regions are copied next to
+# this script as gpt-backups/<timestamp>/*-pristine.bin (+ metadata.txt with
+# the exact geometry needed to write them back — there is no un-carve
+# script, so this backup is the way back).  A run that cannot save that
+# backup does not touch the device.
+#
 # Usage:
 #   ./carve-linux-partition.sh                 # 30 GiB userdata -> linux
 #   ./carve-linux-partition.sh --gib 50
@@ -30,6 +36,8 @@
 #   NABU_SOURCE_LABEL  partition whose tail is carved (default: userdata)
 #   NABU_NEW_LABEL     new partition label (default: linux)
 #   NABU_CARVE_GIB     size of the new partition in GiB (default: 30)
+#   NABU_GPT_BACKUP_DIR directory for the pristine GPT copies
+#                       (default: <script dir>/gpt-backups/<timestamp>)
 #
 set -euo pipefail
 
@@ -41,6 +49,7 @@ CARVE_GIB="${NABU_CARVE_GIB:-30}"
 BLOCK_DEV="${NABU_BLOCK_DEV:-}"
 DRY_RUN=0
 WORK_DIR=""
+BACKUP_DIR=""
 TMP_PREFIX="/data/local/tmp/nabu-gpt"
 ROOT_MODE=""
 
@@ -211,6 +220,44 @@ push_region() {
         >/dev/null
 }
 
+# Persist the untouched GPT regions BEFORE patching: WORK_DIR is a mktemp
+# directory deleted on exit, so the only rollback copy is this one. Any
+# failure here aborts (set -e) with the device still untouched.
+save_pristine() {
+    if [ "${DRY_RUN}" -eq 1 ]; then
+        return 0
+    fi
+    local stamp
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    BACKUP_DIR="${NABU_GPT_BACKUP_DIR:-${SCRIPT_DIR}/gpt-backups/${stamp}}"
+    mkdir -p "${BACKUP_DIR}"
+    cp "${WORK_DIR}/primary.bin" "${BACKUP_DIR}/primary-pristine.bin"
+    cp "${WORK_DIR}/backup.bin" "${BACKUP_DIR}/backup-pristine.bin"
+    {
+        printf 'script=carve-linux-partition.sh\n'
+        printf 'source_label=%s\n' "${SOURCE_LABEL}"
+        printf 'new_label=%s\n' "${NEW_LABEL}"
+        printf 'carve_gib=%s\n' "${CARVE_GIB}"
+        printf 'new_first_lba=%s\n' "${NEW_FIRST_LBA:-}"
+        printf 'root_mode=%s\n' "${ROOT_MODE}"
+        printf 'block_dev=%s\n' "${BLOCK_DEV}"
+        printf 'sector_size=%s\n' "${SECTOR_SIZE}"
+        printf 'total_lbas=%s\n' "${TOTAL_LBAS}"
+        printf 'primary_file=primary-pristine.bin\n'
+        printf 'primary_skip=%s\n' "${PRIMARY_SKIP}"
+        printf 'primary_count=%s\n' "${PRIMARY_SECTORS}"
+        printf 'backup_file=backup-pristine.bin\n'
+        printf 'backup_skip=%s\n' "${BACKUP_SKIP}"
+        printf 'backup_count=%s\n' "${BACKUP_SECTORS}"
+        printf '# Restore: adb push both .bin files to the device, then as root:\n'
+        printf '#   dd if=primary-pristine.bin of=%s bs=%s seek=%s count=%s conv=notrunc\n' \
+            "${BLOCK_DEV}" "${SECTOR_SIZE}" "${PRIMARY_SKIP}" "${PRIMARY_SECTORS}"
+        printf '#   dd if=backup-pristine.bin of=%s bs=%s seek=%s count=%s conv=notrunc\n' \
+            "${BLOCK_DEV}" "${SECTOR_SIZE}" "${BACKUP_SKIP}" "${BACKUP_SECTORS}"
+    } > "${BACKUP_DIR}/metadata.txt"
+    log "pristine GPT regions saved to ${BACKUP_DIR}"
+}
+
 region_list() {
     local dump="$1" base_lba="$2" header_lba="$3"
     python3 "${CARVE_TOOL}" \
@@ -224,6 +271,8 @@ log "pulling the primary GPT (LBA ${PRIMARY_SKIP}..$(( PRIMARY_SKIP + PRIMARY_SE
 pull_region "${PRIMARY_SKIP}" "${PRIMARY_SECTORS}" "${WORK_DIR}/primary.bin"
 log "pulling the backup GPT (LBA ${BACKUP_SKIP}..$(( BACKUP_SKIP + BACKUP_SECTORS - 1 )))..."
 pull_region "${BACKUP_SKIP}" "${BACKUP_SECTORS}" "${WORK_DIR}/backup.bin"
+
+save_pristine
 
 # Record the pre-carve geometry so the post-write verification can prove that
 # exactly the intended range moved (source keeps its head, new partition gets
@@ -320,3 +369,4 @@ done
 log "done. New layout: ${SOURCE_LABEL} = LBA ${ORIGINAL_FIRST}..${src_last}, ${NEW_LABEL} = LBA ${new_first}..${new_last}"
 log "${SOURCE_LABEL} still holds the old (stale, encrypted) filesystem inside a smaller partition."
 log "Boot Android and let its vold format it, or run 'make_f2fs -n ${SOURCE_LABEL} ${BLOCK_DEV}p...'"
+log "Pristine GPT backup: ${BACKUP_DIR} (restore steps in its metadata.txt)"

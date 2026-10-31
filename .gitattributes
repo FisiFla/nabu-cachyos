@@ -1,0 +1,5 @@
+# Windows scripts must keep CRLF in every working tree: cmd.exe is
+# unreliable with LF-only batch files, and release bundles are assembled
+# from a macOS/Linux checkout.
+*.bat text eol=crlf
+*.ps1 text eol=crlf

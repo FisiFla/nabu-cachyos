@@ -14,15 +14,26 @@
 # existing partition changes.  The stock Android slot A is left untouched, so
 # `fastboot set_active a` is still a valid way back into Android.
 #
+# Root access modes: works from a custom recovery whose adbd runs as root
+# already (TWRP/OrangeFox booted with `fastboot boot`: `adb shell id -u` is
+# 0, no su binary) and from a rooted ROM via `su -c`.  The mode is detected.
+#
+# Before anything is patched, the untouched GPT regions are copied next to
+# this script as gpt-backups/<timestamp>/*-pristine.bin (+ metadata.txt with
+# the exact geometry needed to write them back).  A run that cannot save
+# that backup does not touch the device.
+#
 # Usage:
 #   ./relabel-partition.sh              # userdata -> linux
 #   ./relabel-partition.sh --dry-run    # show what would change
 #   NABU_OLD_LABEL=linux NABU_NEW_LABEL=userdata ./relabel-partition.sh
 #
 # Environment:
-#   NABU_BLOCK_DEV    block device of the UFS LUN 0 (default: auto-detect)
-#   NABU_OLD_LABEL    current partition label (default: userdata)
-#   NABU_NEW_LABEL    new partition label (default: linux)
+#   NABU_BLOCK_DEV      block device of the UFS LUN 0 (default: auto-detect)
+#   NABU_OLD_LABEL      current partition label (default: userdata)
+#   NABU_NEW_LABEL      new partition label (default: linux)
+#   NABU_GPT_BACKUP_DIR directory for the pristine GPT copies
+#                       (default: <script dir>/gpt-backups/<timestamp>)
 #
 set -euo pipefail
 
@@ -33,6 +44,8 @@ NEW_LABEL="${NABU_NEW_LABEL:-linux}"
 BLOCK_DEV="${NABU_BLOCK_DEV:-}"
 DRY_RUN=0
 WORK_DIR=""
+BACKUP_DIR=""
+ROOT_MODE=""
 TMP_PREFIX="/data/local/tmp/nabu-gpt"
 
 # Number of sectors pulled for the primary GPT (LBA 0..5: protective MBR,
@@ -87,20 +100,46 @@ command -v adb    >/dev/null 2>&1 || die "adb is required (platform-tools)"
 
 # --- device / root checks --------------------------------------------------
 adb get-state >/dev/null 2>&1 || die "no device in adb state. Enable USB debugging and reconnect."
-adb shell 'su -c "id -u"' 2>/dev/null | tr -d '\r' | grep -qE '^[0-9]+$' \
-    || die "cannot obtain root on the device (is Magisk/root available?)"
 
-log "adb device: $(adb shell get-serialno 2>/dev/null | tr -d '\r')"
+# --- root mode: adbd-root (recovery) or su (rooted ROM) --------------------
+if [ "$(adb shell 'id -u' 2>/dev/null | tr -d '\r')" = "0" ]; then
+    ROOT_MODE="adb"
+    log "root mode: adbd already runs as uid 0 (custom recovery)"
+else
+    if [ "$(adb shell "su -c 'id -u'" 2>/dev/null | tr -d '\r')" = "0" ]; then
+        ROOT_MODE="su"
+        log "root mode: su (rooted ROM)"
+    else
+        die "cannot obtain root on the device. Boot a custom recovery (TWRP/OrangeFox) or root the ROM first."
+    fi
+fi
+
+# adb joins its arguments with spaces before handing them to the device
+# shell, so the whole device command stays ONE shell-string argument
+# (device-side commands here contain no single quotes). exec-out merges the
+# device-side stderr into the data stream, so every command redirects its
+# stderr on the device (2>/dev/null) or dd's summary bytes corrupt the pulls.
+dev_exec() {
+    if [ "${ROOT_MODE}" = "adb" ]; then
+        adb shell "${1} 2>/dev/null"
+    else
+        adb shell "su -c '${1} 2>/dev/null'"
+    fi
+}
+
+dev_data() {   # like dev_exec, but for binary output
+    if [ "${ROOT_MODE}" = "adb" ]; then
+        adb exec-out "${1} 2>/dev/null"
+    else
+        adb exec-out "su -c '${1} 2>/dev/null'"
+    fi
+}
+
+log "adb device: $(adb get-serialno 2>/dev/null | tr -d '\r')"
 
 # --- find the UFS LUN 0 block device ---------------------------------------
 has_gpt_signature() {
-    local dev="$1"
-    # The whole command has to be a single argument: adb joins its arguments
-    # with spaces before handing them to the device shell, so an unquoted
-    # `su -c dd if=...` would run dd with the arguments as positional
-    # parameters instead of as options.
-    adb exec-out "su -c 'dd if=${dev} bs=4096 skip=1 count=1 2>/dev/null'" \
-        2>/dev/null | head -c 8 | cmp -s - <(printf 'EFI PART')
+    dev_data "dd if=${1} bs=4096 skip=1 count=1" | head -c 8 | cmp -s - <(printf 'EFI PART')
 }
 
 detect_block_dev() {
@@ -111,7 +150,7 @@ detect_block_dev() {
             printf '%s\n' "${dev}"
             return 0
         fi
-    done < <(adb shell 'ls -1 /dev/block/sd* 2>/dev/null' | tr -d '\r')
+    done < <(dev_exec "ls -1 /dev/block/sd*" | tr -d '\r')
     return 1
 }
 
@@ -127,7 +166,7 @@ has_gpt_signature "${BLOCK_DEV}" \
 
 # --- geometry --------------------------------------------------------------
 read_blockdev() {
-    adb shell "su -c 'blockdev $1 ${BLOCK_DEV}'" 2>/dev/null | tr -d '\r' | tr -d '[:space:]'
+    dev_exec "blockdev $1 ${BLOCK_DEV}" | tr -d '\r' | tr -d '[:space:]'
 }
 
 SECTOR_SIZE="$(read_blockdev --getss)"
@@ -154,7 +193,7 @@ WORK_DIR="$(mktemp -d)"
 # --- pull, patch, push -----------------------------------------------------
 pull_region() {
     local skip="$1" count="$2" out="$3"
-    adb exec-out "su -c 'dd if=${BLOCK_DEV} bs=${SECTOR_SIZE} skip=${skip} count=${count} 2>/dev/null'" \
+    dev_data "dd if=${BLOCK_DEV} bs=${SECTOR_SIZE} skip=${skip} count=${count}" \
         > "${out}"
     local expected=$(( count * SECTOR_SIZE ))
     local actual
@@ -166,8 +205,44 @@ pull_region() {
 push_region() {
     local local_file="$1" skip="$2" count="$3" remote="$4"
     adb push "${local_file}" "${remote}" >/dev/null
-    adb shell "su -c 'dd if=${remote} of=${BLOCK_DEV} bs=${SECTOR_SIZE} seek=${skip} count=${count} conv=notrunc 2>/dev/null'" \
+    dev_exec "dd if=${remote} of=${BLOCK_DEV} bs=${SECTOR_SIZE} seek=${skip} count=${count} conv=notrunc" \
         >/dev/null
+}
+
+# Persist the untouched GPT regions BEFORE patching: WORK_DIR is a mktemp
+# directory deleted on exit, so the only rollback copy is this one. Any
+# failure here aborts (set -e) with the device still untouched.
+save_pristine() {
+    if [ "${DRY_RUN}" -eq 1 ]; then
+        return 0
+    fi
+    local stamp
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    BACKUP_DIR="${NABU_GPT_BACKUP_DIR:-${SCRIPT_DIR}/gpt-backups/${stamp}}"
+    mkdir -p "${BACKUP_DIR}"
+    cp "${WORK_DIR}/primary.bin" "${BACKUP_DIR}/primary-pristine.bin"
+    cp "${WORK_DIR}/backup.bin" "${BACKUP_DIR}/backup-pristine.bin"
+    {
+        printf 'script=relabel-partition.sh\n'
+        printf 'old_label=%s\n' "${OLD_LABEL}"
+        printf 'new_label=%s\n' "${NEW_LABEL}"
+        printf 'root_mode=%s\n' "${ROOT_MODE}"
+        printf 'block_dev=%s\n' "${BLOCK_DEV}"
+        printf 'sector_size=%s\n' "${SECTOR_SIZE}"
+        printf 'total_lbas=%s\n' "${TOTAL_LBAS}"
+        printf 'primary_file=primary-pristine.bin\n'
+        printf 'primary_skip=%s\n' "${PRIMARY_SKIP}"
+        printf 'primary_count=%s\n' "${PRIMARY_SECTORS}"
+        printf 'backup_file=backup-pristine.bin\n'
+        printf 'backup_skip=%s\n' "${BACKUP_SKIP}"
+        printf 'backup_count=%s\n' "${BACKUP_SECTORS}"
+        printf '# Restore: adb push both .bin files to the device, then as root:\n'
+        printf '#   dd if=primary-pristine.bin of=%s bs=%s seek=%s count=%s conv=notrunc\n' \
+            "${BLOCK_DEV}" "${SECTOR_SIZE}" "${PRIMARY_SKIP}" "${PRIMARY_SECTORS}"
+        printf '#   dd if=backup-pristine.bin of=%s bs=%s seek=%s count=%s conv=notrunc\n' \
+            "${BLOCK_DEV}" "${SECTOR_SIZE}" "${BACKUP_SKIP}" "${BACKUP_SECTORS}"
+    } > "${BACKUP_DIR}/metadata.txt"
+    log "pristine GPT regions saved to ${BACKUP_DIR}"
 }
 
 relabel_region() {
@@ -190,6 +265,8 @@ log "pulling the primary GPT (LBA ${PRIMARY_SKIP}..$(( PRIMARY_SKIP + PRIMARY_SE
 pull_region "${PRIMARY_SKIP}" "${PRIMARY_SECTORS}" "${WORK_DIR}/primary.bin"
 log "pulling the backup GPT (LBA ${BACKUP_SKIP}..$(( BACKUP_SKIP + BACKUP_SECTORS - 1 )))..."
 pull_region "${BACKUP_SKIP}" "${BACKUP_SECTORS}" "${WORK_DIR}/backup.bin"
+
+save_pristine
 
 relabel_region "${WORK_DIR}/primary.bin" "${PRIMARY_SKIP}" 1 "primary"
 relabel_region "${WORK_DIR}/backup.bin" "${BACKUP_SKIP}" "${BACKUP_HEADER_LBA}" "backup"
@@ -231,4 +308,5 @@ for region in primary backup; do
 done
 
 log "done. Reboot the device so the firmware re-reads the partition table."
+log "Pristine GPT backup: ${BACKUP_DIR} (restore steps in its metadata.txt)"
 log "You can now flash the rootfs: fastboot flash linux linux.img"

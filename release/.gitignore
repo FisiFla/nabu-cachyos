@@ -1,2 +1,3 @@
 dist/
 .ssh-inject.*/
+gpt-backups/

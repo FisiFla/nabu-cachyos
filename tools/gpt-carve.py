@@ -86,6 +86,16 @@ def carve_one_gpt(dev, hdr_lba, source_name, new_name, new_first_lba, dry_run,
         return None
     s_first, s_last = struct.unpack_from("<QQ", array, soff + 32)
 
+    # Same duplicate-PARTLABEL refusal as the relabel: a table that already
+    # has a `linux` partition (e.g. from another nabu installer) must reuse
+    # it, not carve a second one out of the already-shrunken source.
+    existing_idx, _existing_off = find_partition(array, header, new_name)
+    if existing_idx is not None:
+        raise GptError(
+            "a partition named %r already exists (entry #%d) — refusing to create "
+            "a duplicate PARTLABEL; reuse that partition, or rename/remove it first"
+            % (new_name, existing_idx))
+
     if new_first_lba <= s_first:
         raise GptError(
             "new partition must start above %r (first LBA %d)" % (source_name, s_first))

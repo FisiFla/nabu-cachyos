@@ -8,7 +8,7 @@ RELABEL_HELPER="${SCRIPT_DIR}/relabel-partition.sh"
 echo "=== CachyOS Nabu Flasher ==="
 echo ""
 echo "This will install CachyOS ARM on your Xiaomi Pad 5."
-echo "Android data will be erased. Slot A (Android) is preserved as fallback."
+echo "The existing contents of the linux partition will be erased. Slot A is preserved as fallback."
 echo ""
 
 # Check prerequisites
@@ -194,7 +194,7 @@ echo ""
 if [ "${FORCE_FLASH:-0}" = "1" ]; then
     echo "FORCE_FLASH=1 set, skipping confirmation."
 else
-    read -p "Ready to flash? This will erase Android userdata. [y/N] " -n 1 -r
+    read -p "Ready to flash? This will erase the linux partition. [y/N] " -n 1 -r
     echo
     [[ $REPLY =~ ^[Yy]$ ]] || exit 0
 fi

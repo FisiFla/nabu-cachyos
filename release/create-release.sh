@@ -23,6 +23,10 @@ for f in \
     "${VBMETA_SOURCE}" \
     "${SCRIPT_DIR}/flash.sh" \
     "${SCRIPT_DIR}/join-and-flash.sh" \
+    "${SCRIPT_DIR}/flash.ps1" \
+    "${SCRIPT_DIR}/join-and-flash.ps1" \
+    "${SCRIPT_DIR}/flash.bat" \
+    "${SCRIPT_DIR}/join-and-flash.bat" \
     "${SCRIPT_DIR}/inject-ssh-key.sh" \
     "${SCRIPT_DIR}/relabel-partition.sh" \
     "${REPO_DIR}/tools/gpt-relabel.py" \
@@ -40,6 +44,10 @@ cp "${OUTPUT_DIR}/boot.img" "${DIST_DIR}/"
 cp "${VBMETA_SOURCE}" "${DIST_DIR}/vbmeta_disabled.img"
 cp "${SCRIPT_DIR}/flash.sh" "${DIST_DIR}/"
 cp "${SCRIPT_DIR}/join-and-flash.sh" "${DIST_DIR}/"
+cp "${SCRIPT_DIR}/flash.ps1" "${DIST_DIR}/"
+cp "${SCRIPT_DIR}/join-and-flash.ps1" "${DIST_DIR}/"
+cp "${SCRIPT_DIR}/flash.bat" "${DIST_DIR}/"
+cp "${SCRIPT_DIR}/join-and-flash.bat" "${DIST_DIR}/"
 cp "${SCRIPT_DIR}/inject-ssh-key.sh" "${DIST_DIR}/"
 cp "${SCRIPT_DIR}/relabel-partition.sh" "${DIST_DIR}/"
 cp "${SCRIPT_DIR}/carve-linux-partition.sh" "${DIST_DIR}/"
@@ -57,10 +65,14 @@ split -b "${PART_SIZE}" "${OUTPUT_DIR}/linux.img.zst" "${DIST_DIR}/linux.img.zst
     "${SHA256_CMD[@]}" \
         boot.img \
         carve-linux-partition.sh \
+        flash.bat \
+        flash.ps1 \
         flash.sh \
         gpt-carve.py \
         gpt-relabel.py \
         inject-ssh-key.sh \
+        join-and-flash.bat \
+        join-and-flash.ps1 \
         join-and-flash.sh \
         linux.img.zst.part-* \
         image-size.txt \

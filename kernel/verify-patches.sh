@@ -8,13 +8,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TREE="${1:-}"
-[ -n "${TREE}" ] && [ -d "${TREE}/.git" ] || {
+if [ -z "${TREE}" ] || [ ! -d "${TREE}/.git" ]; then
     echo "usage: $0 /path/to/kernel-tree (a git checkout)" >&2
     exit 2
-}
+fi
 
 WORK_DIR="$(mktemp -d)"
-# shellcheck disable=SC2329  # invoked indirectly via the EXIT trap below
+# shellcheck disable=SC2317,SC2329  # invoked indirectly via the EXIT trap below
 cleanup() {
     git -C "${TREE}" worktree remove --force "${WORK_DIR}/wt" >/dev/null 2>&1 || true
     rm -rf "${WORK_DIR}"
